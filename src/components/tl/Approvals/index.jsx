@@ -1,311 +1,287 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle, MapPin, Camera, Clock, GitCommit, CalendarDays, FileText, Home, Edit3 } from 'lucide-react';
 import styles from './approvals.module.css';
+import { leaveRequests, timesheetReviews, wfhRequests, attendanceCorrections } from './mockData';
+import { AlertTriangle, MapPin, CheckCircle, Clock, FileText, Camera, GitCommit, Calendar } from 'lucide-react';
 
-// --- MOCK DATA ---
-const leaveRequests = [
-  { id: 1, emp: 'Alice Chen', type: 'Annual Leave', dates: 'May 20 - May 24', days: 5, reason: 'Family vacation to Hawaii. Need to disconnect.', overlap: true, overlapDetails: 'Bob Smith is also on Annual Leave from May 21 to May 23.' },
-  { id: 2, emp: 'Bob Smith', type: 'Sick Leave', dates: 'May 18', days: 1, reason: 'High fever and doctor appointment.', overlap: false, overlapDetails: '' },
-];
-
-const timesheetRequests = [
-  { id: 1, emp: 'Charlie Davis', hours: 42, commits: 18, match: true, breakdown: [{ task: 'API Integration', h: 20 }, { task: 'Bug Fixes', h: 22 }] },
-  { id: 2, emp: 'Diana Prince', hours: 38, commits: 2, match: false, breakdown: [{ task: 'Documentation', h: 10 }, { task: 'Research', h: 28 }] },
-];
-
-const wfhRequests = [
-  { id: 1, emp: 'Evan Wright', date: 'May 19', reason: 'Plumber coming to fix a leak.', verified: true, ip: '192.168.1.45 (Home ISP)' },
-  { id: 2, emp: 'Fiona Gallagher', date: 'May 20', reason: 'Focus work on architectural design.', verified: false, ip: 'Unknown IP' },
-];
-
-const correctionRequests = [
-  { id: 1, emp: 'George Hale', date: 'May 17', requested: '09:00 AM - 06:00 PM', reason: 'Forgot to clock in on mobile app due to dead battery.', sla: '12h left', coords: '37.7749° N, 122.4194° W' },
-];
-
-export default function Approvals() {
+const Approvals = () => {
   const [activeTab, setActiveTab] = useState('leave');
-  const [selectedItem, setSelectedItem] = useState(null);
+  
+  const [leaves, setLeaves] = useState(leaveRequests);
+  const [timesheets, setTimesheets] = useState(timesheetReviews);
+  const [wfhs, setWfhs] = useState(wfhRequests);
+  const [corrections, setCorrections] = useState(attendanceCorrections);
+
+  const [selectedId, setSelectedId] = useState(null);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSelectedItem(null);
+    setSelectedId(null);
   };
 
-  const handleAction = (e, action) => {
-    e.stopPropagation();
-    alert(`${action} action triggered!`);
+  const handleAction = (id, actionType) => {
+    if (activeTab === 'leave') {
+      setLeaves(prev => prev.filter(item => item.id !== id));
+    } else if (activeTab === 'timesheet') {
+      setTimesheets(prev => prev.filter(item => item.id !== id));
+    } else if (activeTab === 'wfh') {
+      setWfhs(prev => prev.filter(item => item.id !== id));
+    } else if (activeTab === 'corrections') {
+      setCorrections(prev => prev.filter(item => item.id !== id));
+    }
+    if (selectedId === id) setSelectedId(null);
   };
 
-  const renderList = () => {
-    switch (activeTab) {
-      case 'leave':
-        return leaveRequests.map(req => (
-          <div key={req.id} className={`${styles.listItem} ${selectedItem?.id === req.id ? styles.listItemActive : ''}`} onClick={() => setSelectedItem(req)}>
-            <div className={styles.listItemHeader}>
-              <span className={styles.empName}>{req.emp}</span>
-              {req.overlap && <span className={styles.urgencyBadge}>Overlap Warning</span>}
-            </div>
-            <div className={styles.itemDesc}>{req.type} | {req.dates} ({req.days} days)</div>
-            <div className={styles.actionRow}>
-              <button className={styles.btnApprove} onClick={(e) => handleAction(e, 'Approve')}>Approve</button>
-              <button className={styles.btnReject} onClick={(e) => handleAction(e, 'Reject')}>Reject</button>
-            </div>
-          </div>
-        ));
+  // Helper to get current list and selected item
+  let currentList = [];
+  let selectedItem = null;
+  if (activeTab === 'leave') {
+    currentList = leaves;
+    selectedItem = leaves.find(l => l.id === selectedId);
+  } else if (activeTab === 'timesheet') {
+    currentList = timesheets;
+    selectedItem = timesheets.find(t => t.id === selectedId);
+  } else if (activeTab === 'wfh') {
+    currentList = wfhs;
+    selectedItem = wfhs.find(w => w.id === selectedId);
+  } else if (activeTab === 'corrections') {
+    currentList = corrections;
+    selectedItem = corrections.find(c => c.id === selectedId);
+  }
+
+  // --- RENDER DETAIL PANELS ---
+  
+  const renderLeaveDetails = (item) => (
+    <>
+      <div className={styles.detailHeader}>
+        <h2 style={{ fontSize: '20px', margin: '0 0 8px 0', color: '#0f172a' }}>{item.employee}</h2>
+        <span style={{ color: '#94a3b8', fontSize: '14px' }}>{item.type} • {item.days} Days</span>
+      </div>
       
-      case 'timesheet':
-        return timesheetRequests.map(req => (
-          <div key={req.id} className={`${styles.listItem} ${selectedItem?.id === req.id ? styles.listItemActive : ''}`} onClick={() => setSelectedItem(req)}>
-            <div className={styles.listItemHeader}>
-              <span className={styles.empName}>{req.emp}</span>
-              {!req.match && <span className={styles.urgencyBadge} style={{ backgroundColor: '#ef4444' }}>Audit Flag</span>}
-            </div>
-            <div className={styles.itemDesc}>Total Hours: {req.hours}h | Commits: {req.commits}</div>
-            <div className={styles.actionRow}>
-              <button className={styles.btnApprove} onClick={(e) => handleAction(e, 'Approve')}>Approve</button>
-              <button className={styles.btnReject} onClick={(e) => handleAction(e, 'Reject')}>Reject w/ Reason</button>
-            </div>
+      {item.overlapWarning && (
+        <div className={styles.warningBox}>
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Calendar Conflict Detected</strong>
+            <p style={{ margin: '4px 0 0 0' }}>{item.overlapWarning}</p>
           </div>
-        ));
+        </div>
+      )}
 
-      case 'wfh':
-        return wfhRequests.map(req => (
-          <div key={req.id} className={`${styles.listItem} ${selectedItem?.id === req.id ? styles.listItemActive : ''}`} onClick={() => setSelectedItem(req)}>
-            <div className={styles.listItemHeader}>
-              <span className={styles.empName}>{req.emp}</span>
-            </div>
-            <div className={styles.itemDesc}>Date: {req.date} | {req.reason}</div>
-            <div className={styles.actionRow}>
-              <button className={styles.btnApprove} onClick={(e) => handleAction(e, 'Approve')}>Approve</button>
-              <button className={styles.btnReject} onClick={(e) => handleAction(e, 'Reject')}>Reject</button>
-            </div>
-          </div>
-        ));
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Requested Dates</span>
+        <div className={styles.detailValue}>{item.dates}</div>
+      </div>
+      
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Reason</span>
+        <div className={styles.detailValue}>{item.reason}</div>
+      </div>
+    </>
+  );
 
-      case 'correction':
-        return correctionRequests.map(req => (
-          <div key={req.id} className={`${styles.listItem} ${selectedItem?.id === req.id ? styles.listItemActive : ''}`} onClick={() => setSelectedItem(req)}>
-            <div className={styles.listItemHeader}>
-              <span className={styles.empName}>{req.emp}</span>
-              <span className={styles.urgencyBadge} style={{ backgroundColor: '#3b82f6' }}>SLA: {req.sla}</span>
-            </div>
-            <div className={styles.itemDesc}>{req.date} | {req.requested}</div>
-            <div className={styles.actionRow}>
-              <button className={styles.btnApprove} onClick={(e) => handleAction(e, 'Approve')}>Approve</button>
-              <button className={styles.btnReject} onClick={(e) => handleAction(e, 'Reject')}>Reject</button>
-            </div>
-          </div>
-        ));
+  const renderTimesheetDetails = (item) => (
+    <>
+      <div className={styles.detailHeader}>
+        <h2 style={{ fontSize: '20px', margin: '0 0 8px 0', color: '#0f172a' }}>{item.employee}</h2>
+        <span style={{ color: '#94a3b8', fontSize: '14px' }}>Week of {item.weekOf}</span>
+      </div>
 
-      default:
-        return null;
-    }
-  };
+      <div className={styles.gitBadge}>
+        <GitCommit size={14} />
+        {item.gitCommits} Git Commits Matching Logged Hours
+      </div>
 
-  const renderDetails = () => {
-    if (!selectedItem) {
-      return <div className={styles.emptyState}>Select a request from the list to view details.</div>;
-    }
+      <div className={styles.detailSection} style={{ marginTop: '24px' }}>
+        <span className={styles.detailLabel}>Weekly Hours Grid</span>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{item.hours.Mon}h</td>
+              <td>{item.hours.Tue}h</td>
+              <td>{item.hours.Wed}h</td>
+              <td>{item.hours.Thu}h</td>
+              <td>{item.hours.Fri}h</td>
+              <td>{item.hours.Sat}h</td>
+              <td>{item.hours.Sun}h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-    switch (activeTab) {
-      case 'leave':
-        return (
-          <>
-            <div className={styles.detailHeader}>
-              <div className={styles.detailTitle}>{selectedItem.emp}</div>
-              <div className={styles.detailSub}>{selectedItem.type} Request</div>
-            </div>
-            
-            {selectedItem.overlap && (
-              <div className={styles.warningBox}>
-                <AlertTriangle size={16} />
-                <span><strong>Team Availability Overlap:</strong> {selectedItem.overlapDetails}</span>
-              </div>
-            )}
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Total Logged</span>
+        <div className={styles.detailValue} style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.totalHours} Hours</div>
+      </div>
+    </>
+  );
 
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Dates Requested</div>
-              <div className={styles.infoValue}>{selectedItem.dates} ({selectedItem.days} days)</div>
-            </div>
+  const renderWfhDetails = (item) => (
+    <>
+      <div className={styles.detailHeader}>
+        <h2 style={{ fontSize: '20px', margin: '0 0 8px 0', color: '#0f172a' }}>{item.employee}</h2>
+        <span style={{ color: '#94a3b8', fontSize: '14px' }}>WFH Request for {item.date}</span>
+      </div>
 
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Reason</div>
-              <div className={styles.infoValue}>{selectedItem.reason}</div>
-            </div>
-          </>
-        );
+      {item.locationVerified && (
+        <div className={styles.gitBadge} style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderColor: 'rgba(59, 130, 246, 0.2)', marginBottom: '24px' }}>
+          <MapPin size={14} />
+          Home Location Verified in System
+        </div>
+      )}
 
-      case 'timesheet':
-        return (
-          <>
-            <div className={styles.detailHeader}>
-              <div className={styles.detailTitle}>{selectedItem.emp}</div>
-              <div className={styles.detailSub}>Weekly Timesheet Review</div>
-            </div>
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Reason</span>
+        <div className={styles.detailValue}>{item.reason}</div>
+      </div>
+    </>
+  );
 
-            {selectedItem.match ? (
-              <div className={styles.successBox}>
-                <CheckCircle size={16} />
-                <span><strong>Git-Commit Match:</strong> Logged hours align with repository commit volume ({selectedItem.commits} commits).</span>
-              </div>
-            ) : (
-              <div className={styles.warningBox}>
-                <AlertTriangle size={16} />
-                <span><strong>Audit Flag:</strong> High hours ({selectedItem.hours}h) but low commit volume ({selectedItem.commits} commits). Please review carefully.</span>
-              </div>
-            )}
+  const renderCorrectionDetails = (item) => (
+    <>
+      <div className={styles.detailHeader}>
+        <h2 style={{ fontSize: '20px', margin: '0 0 8px 0', color: '#0f172a' }}>{item.employee}</h2>
+        <span style={{ color: '#94a3b8', fontSize: '14px' }}>Attendance Correction for {item.date}</span>
+      </div>
 
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Hours Breakdown</div>
-              <table className={styles.gridTable}>
-                <thead>
-                  <tr>
-                    <th>Task</th>
-                    <th>Hours Logged</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedItem.breakdown.map((b, i) => (
-                    <tr key={i}>
-                      <td>{b.task}</td>
-                      <td>{b.h}h</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td><strong>Total</strong></td>
-                    <td><strong>{selectedItem.hours}h</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </>
-        );
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Requested Times</span>
+        <div className={styles.detailValue}>{item.requestedTimes}</div>
+      </div>
 
-      case 'wfh':
-        return (
-          <>
-            <div className={styles.detailHeader}>
-              <div className={styles.detailTitle}>{selectedItem.emp}</div>
-              <div className={styles.detailSub}>Work From Home Request</div>
-            </div>
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Reason</span>
+        <div className={styles.detailValue}>{item.reason}</div>
+      </div>
 
-            {selectedItem.verified ? (
-              <div className={styles.successBox}>
-                <MapPin size={16} />
-                <span><strong>Location Verified:</strong> Logged from registered Home IP ({selectedItem.ip}).</span>
-              </div>
-            ) : (
-              <div className={styles.warningBox}>
-                <AlertTriangle size={16} />
-                <span><strong>Location Unverified:</strong> Logged from {selectedItem.ip}.</span>
-              </div>
-            )}
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Date</div>
-              <div className={styles.infoValue}>{selectedItem.date}</div>
-            </div>
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Reason</div>
-              <div className={styles.infoValue}>{selectedItem.reason}</div>
-            </div>
-          </>
-        );
-
-      case 'correction':
-        return (
-          <>
-            <div className={styles.detailHeader}>
-              <div className={styles.detailTitle}>{selectedItem.emp}</div>
-              <div className={styles.detailSub}>Attendance Correction Request</div>
-            </div>
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Requested Change</div>
-              <div className={styles.infoValue}>{selectedItem.date} | {selectedItem.requested}</div>
-            </div>
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Reason</div>
-              <div className={styles.infoValue}>{selectedItem.reason}</div>
-            </div>
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>GPS Coordinates at requested time</div>
-              <div className={styles.infoValue} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <MapPin size={14} color="#64748b" /> {selectedItem.coords}
-              </div>
-            </div>
-
-            <div className={styles.infoBlock}>
-              <div className={styles.infoLabel}>Photo Evidence</div>
-              <div className={styles.imagePlaceholder}>
-                <Camera size={24} style={{ marginRight: '8px' }} />
-                <span>No photo attached</span>
-              </div>
-            </div>
-          </>
-        );
-
-      default:
-        return null;
-    }
-  };
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>System Verification</span>
+        <table className={styles.table}>
+          <tbody>
+            <tr>
+              <td style={{ color: '#94a3b8' }}>Photo Evidence</td>
+              <td>{item.photoEvidence ? <span style={{ color: '#10b981' }}><Camera size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }}/> Provided</span> : 'None'}</td>
+            </tr>
+            <tr>
+              <td style={{ color: '#94a3b8' }}>GPS Coordinates</td>
+              <td><MapPin size={14} style={{ marginRight: '4px', verticalAlign: 'middle', color: '#3b82f6' }}/> {item.gpsCoords}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 
   return (
-    <div className={styles.container}>
-      {/* 1. Approval Type Tabs */}
-      <div className={styles.tabsHeader}>
+    <div className={styles.approvalsContainer}>
+      
+      {/* TABS */}
+      <div className={styles.topTabs}>
         <button 
-          className={`${styles.tabBtn} ${activeTab === 'leave' ? styles.tabBtnActive : ''}`} 
+          className={`${styles.tabBtn} ${activeTab === 'leave' ? styles.tabBtnActive : ''}`}
           onClick={() => handleTabChange('leave')}
         >
-          <CalendarDays size={16} /> Leave
-          <span className={styles.badge}>{leaveRequests.length}</span>
+          <Calendar size={16} /> Leave 
+          {leaves.length > 0 && <span className={styles.badge}>{leaves.length}</span>}
         </button>
-
         <button 
-          className={`${styles.tabBtn} ${activeTab === 'timesheet' ? styles.tabBtnActive : ''}`} 
+          className={`${styles.tabBtn} ${activeTab === 'timesheet' ? styles.tabBtnActive : ''}`}
           onClick={() => handleTabChange('timesheet')}
         >
-          <FileText size={16} /> Timesheet
-          <span className={styles.badge}>{timesheetRequests.length}</span>
+          <Clock size={16} /> Timesheet
+          {timesheets.length > 0 && <span className={styles.badge}>{timesheets.length}</span>}
         </button>
-
         <button 
-          className={`${styles.tabBtn} ${activeTab === 'wfh' ? styles.tabBtnActive : ''}`} 
+          className={`${styles.tabBtn} ${activeTab === 'wfh' ? styles.tabBtnActive : ''}`}
           onClick={() => handleTabChange('wfh')}
         >
-          <Home size={16} /> WFH
-          <span className={styles.badge}>{wfhRequests.length}</span>
+          <FileText size={16} /> WFH
+          {wfhs.length > 0 && <span className={styles.badge}>{wfhs.length}</span>}
         </button>
-
         <button 
-          className={`${styles.tabBtn} ${activeTab === 'correction' ? styles.tabBtnActive : ''}`} 
-          onClick={() => handleTabChange('correction')}
+          className={`${styles.tabBtn} ${activeTab === 'corrections' ? styles.tabBtnActive : ''}`}
+          onClick={() => handleTabChange('corrections')}
         >
-          <Edit3 size={16} /> Attendance Corrections
-          <span className={styles.badge}>{correctionRequests.length}</span>
+          <CheckCircle size={16} /> Attendance Corrections
+          {corrections.length > 0 && <span className={styles.badge}>{corrections.length}</span>}
         </button>
       </div>
 
-      {/* 2. Main Split View */}
+      {/* 2-PANE LAYOUT */}
       <div className={styles.mainGrid}>
         
-        {/* Left Panel: Request List */}
+        {/* LIST PANEL */}
         <div className={styles.listPanel}>
-          <div className={styles.panelTitle}>Approval Request List</div>
-          {renderList()}
+          <div className={styles.panelTitle}>Pending Requests</div>
+          
+          {currentList.length === 0 ? (
+            <div style={{ color: '#64748b', textAlign: 'center', marginTop: '40px' }}>No pending requests in this queue.</div>
+          ) : (
+            currentList.map(item => (
+              <div 
+                key={item.id} 
+                className={`${styles.listItem} ${selectedId === item.id ? styles.listItemSelected : ''}`}
+                onClick={() => setSelectedId(item.id)}
+              >
+                <div className={styles.itemHeader}>
+                  <span className={styles.employeeName}>{item.employee}</span>
+                  {activeTab === 'corrections' && <span className={styles.slaBadge}>{item.slaRemaining} SLA</span>}
+                </div>
+                
+                <div className={styles.itemDesc}>
+                  {activeTab === 'leave' && `${item.type} (${item.days} days)`}
+                  {activeTab === 'timesheet' && `${item.totalHours} hrs logged`}
+                  {activeTab === 'wfh' && `${item.date}`}
+                  {activeTab === 'corrections' && `${item.date}`}
+                </div>
+                
+                <div className={styles.itemActions}>
+                  <button 
+                    className={styles.btnApprove} 
+                    onClick={(e) => { e.stopPropagation(); handleAction(item.id, 'approve'); }}
+                  >
+                    Approve
+                  </button>
+                  <button 
+                    className={styles.btnReject} 
+                    onClick={(e) => { e.stopPropagation(); handleAction(item.id, 'reject'); }}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
-        {/* Right Panel: Detail Panel */}
+        {/* DETAIL PANEL */}
         <div className={styles.detailPanel}>
-          <div className={styles.panelTitle}>Request Detail Panel</div>
-          {renderDetails()}
+          <div className={styles.panelTitle}>Request Details</div>
+          
+          {!selectedItem ? (
+            <div style={{ color: '#64748b', textAlign: 'center', marginTop: '40px' }}>Select a request from the list to view details.</div>
+          ) : (
+            <div>
+              {activeTab === 'leave' && renderLeaveDetails(selectedItem)}
+              {activeTab === 'timesheet' && renderTimesheetDetails(selectedItem)}
+              {activeTab === 'wfh' && renderWfhDetails(selectedItem)}
+              {activeTab === 'corrections' && renderCorrectionDetails(selectedItem)}
+              
+              <div className={styles.bigActionRow}>
+                <button className={styles.btnApprove} onClick={() => handleAction(selectedId, 'approve')}>Approve Request</button>
+                <button className={styles.btnReject} onClick={() => handleAction(selectedId, 'reject')}>Reject Request</button>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
     </div>
   );
-}
+};
+
+export default Approvals;

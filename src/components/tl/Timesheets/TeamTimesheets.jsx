@@ -9,7 +9,7 @@ const employeesData = [
   { id: 4, name: 'Emily Chen', weekOf: 'May 10 - May 16', totalHours: '38h', status: 'REJECTED' },
 ];
 
-const TeamTimesheets = ({ onBack }) => {
+const TeamTimesheets = () => {
   const [activeTab, setActiveTab] = useState('table');
   const [selectedEmployee, setSelectedEmployee] = useState(employeesData[0]);
 
@@ -22,11 +22,6 @@ const TeamTimesheets = ({ onBack }) => {
 
   return (
     <div className={styles.container}>
-      <div className={styles.topBar}>
-        <button className={styles.btnBack} onClick={onBack}>
-          <X size={16} /> Back to My Timesheet
-        </button>
-      </div>
 
       <div className={styles.mainContent}>
         {/* TABS */}

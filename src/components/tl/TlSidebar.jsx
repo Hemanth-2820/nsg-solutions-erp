@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Clock, FileText, AlertTriangle, MessageSquare, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Clock, FileText, AlertTriangle, MessageSquare, CheckCircle } from 'lucide-react';
 
 export default function TlSidebar({ activeTab, setActiveTab }) {
   const isDashboardActive = activeTab === 'dashboard';
@@ -8,10 +8,10 @@ export default function TlSidebar({ activeTab, setActiveTab }) {
   const isTasksActive = activeTab === 'tasks';
   const isAttendanceActive = activeTab === 'attendance';
   const isTimesheetsActive = activeTab === 'timesheets';
+  const isApprovalsActive = activeTab === 'approvals';
   const isReportsActive = activeTab === 'reports';
   const isEscalationsActive = activeTab === 'escalations';
   const isMessagingActive = activeTab === 'messaging';
-  const isApprovalsActive = activeTab === 'approvals';
 
   return (
     <div className="nav-group">
@@ -77,7 +77,7 @@ export default function TlSidebar({ activeTab, setActiveTab }) {
           backgroundColor: 'rgba(59, 130, 246, 0.05)' 
         } : {}}
       >
-        <ClipboardCheck size={18} />
+        <CheckCircle size={18} />
         <span>Approvals</span>
       </button>
 

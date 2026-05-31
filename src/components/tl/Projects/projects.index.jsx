@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './projects.module.css';
-import { Briefcase, Calendar, Users, ListTodo, KanbanSquare, GitCommit, Search, Plus, Play, MoreVertical, Flag, Clock } from 'lucide-react';
+import { Briefcase, Calendar, Users, ListTodo, KanbanSquare, GitCommit, Search, Plus, Play, MoreVertical, Flag, Clock, X, HelpCircle, Eye, CheckCircle, AlertCircle, ChevronRight, AlertTriangle, Menu, CheckSquare, Paperclip, MessageSquare, User, Tag, Info, Lock, ChevronDown } from 'lucide-react';
+
 
 const Projects = () => {
   const [activeProject, setActiveProject] = useState(null);
@@ -15,30 +16,60 @@ const Projects = () => {
   ];
 
   // 2. Create Sprint Form Data
-  const backlogItems = [
-    { id: 'b1', title: 'Implement OAuth 2.0 Login', points: 5, okr: 'Q2-Obj-1' },
-    { id: 'b2', title: 'Design Database Schema for Video Huddles', points: 8, okr: 'Q2-Obj-2' },
-    { id: 'b3', title: 'Setup CI/CD Pipeline', points: 3, okr: 'Q2-Obj-1' },
-    { id: 'b4', title: 'Refactor Auth Middleware', points: 2, okr: 'Q2-Obj-3' },
-  ];
+  const [productBacklog, setProductBacklog] = useState([
+    { id: 'b1', title: 'Implement OAuth 2.0 Login', points: 5, okr: 'Q2-Obj-1', description: 'Add secure OAuth 2.0 authentication flow to the login portal. Ensure compliance with security guidelines.', priority: 'High', assignee: 'Select Team Member...', project: 'NSG-ERP Core', labels: 'frontend, security, auth', criteria: '- Given user is on login page\n- When they click "Login with Google"\n- Then they are redirected to Google Auth\n- And upon success, they receive a JWT token.' },
+    { id: 'b2', title: 'Design Database Schema for Video Huddles', points: 8, okr: 'Q2-Obj-2', description: 'Draft the initial ERD and schema migrations for the video huddles feature.', priority: 'Medium', assignee: 'Michael Chang', project: 'NSG-ERP Core', labels: 'backend, database', criteria: '- Must support multiple participants\n- Must track connection states' },
+    { id: 'b3', title: 'Setup CI/CD Pipeline', points: 3, okr: 'Q2-Obj-1', description: 'Configure GitHub Actions for automated testing and deployment.', priority: 'Critical', assignee: 'David Miller', project: 'Infrastructure', labels: 'devops, ci-cd', criteria: '- Runs tests on PR\n- Deploys to staging on merge' },
+    { id: 'b4', title: 'Refactor Auth Middleware', points: 2, okr: 'Q2-Obj-3', description: 'Clean up the authentication middleware to use the new caching service.', priority: 'Low', assignee: 'Sarah Jenkins', project: 'NSG-ERP Core', labels: 'backend, tech-debt', criteria: '- Uses Redis for session caching\n- Response time < 50ms' },
+  ]);
+  const [sprintBacklog, setSprintBacklog] = useState([]);
 
   // 3. Kanban Task Board Data
   const [kanbanData, setKanbanData] = useState({
     todo: [
-      { id: 't1', title: 'Design Timeline UI', points: 3, priority: 'High', assignee: 'AC', blocked: false },
-      { id: 't2', title: 'API Integration', points: 5, priority: 'Medium', assignee: 'BS', blocked: false }
+      { id: 't1', title: 'Refactor Leaves Request Flow', points: 3, priority: 'Medium', assignee: 'SJ', blocked: false, date: '27-05-26', progress: 50 },
+      { id: 't2', title: 'Draft Annual Leave Approval', points: 5, priority: 'Medium', assignee: 'BS', blocked: false, date: '28-05-26', progress: 0 }
     ],
     inProgress: [
-      { id: 't3', title: 'Sprint Form Validation', points: 2, priority: 'High', assignee: 'MC', blocked: true }
+      { id: 't3', title: 'Implement Payroll Dashboard', points: 2, priority: 'High', assignee: 'MC', blocked: false, date: '25-05-26', progress: 33 }
     ],
-    codeReview: [
-      { id: 't4', title: 'Authentication Service', points: 8, priority: 'Critical', assignee: 'ER', blocked: false }
+    codeReview: [],
+    testing: [
+      { id: 't4', title: 'Setup WebSocket Client', points: 8, priority: 'High', assignee: 'ER', blocked: false, date: '24-05-26', progress: 67 }
     ],
-    testing: [],
-    done: [
-      { id: 't5', title: 'Setup Repository', points: 1, priority: 'Low', assignee: 'MC', blocked: false }
+    completed: [
+      { id: 't5', title: 'Optimize Main Sidebar Layout', points: 1, priority: 'Low', assignee: 'MC', blocked: false, date: '18-05-26', progress: 100 },
+      { id: 't6', title: 'Fix Biometric Face Scanning', points: 4, priority: 'High', assignee: 'SJ', blocked: false, date: '20-05-26', progress: 100 }
     ]
   });
+
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState(null);
+
+  const getAssigneeDisplay = (assigneeStr) => {
+    if (!assigneeStr || assigneeStr === 'SJ') return { avatar: 'SJ', name: 'Sarah Jenkins' };
+    if (assigneeStr === 'BS') return { avatar: 'BS', name: 'Bob Smith' };
+    if (assigneeStr === 'DM' || assigneeStr === 'David Miller') return { avatar: 'DM', name: 'David Miller' };
+    if (assigneeStr === 'MC' || assigneeStr === 'Michael Chang') return { avatar: 'SJ', name: 'Sarah Jenkins' };
+    if (assigneeStr === 'Select Team Member...') return { avatar: '?', name: 'Unassigned' };
+    if (assigneeStr.includes(' ')) {
+      const parts = assigneeStr.split(' ');
+      return { avatar: (parts[0][0] + parts[1][0]).toUpperCase(), name: assigneeStr };
+    }
+    return { avatar: assigneeStr.substring(0, 2).toUpperCase(), name: assigneeStr };
+  };
+
+  useEffect(() => {
+    const handleNewTask = (e) => {
+      const task = e.detail;
+      setKanbanData(prev => ({
+        ...prev,
+        todo: [...prev.todo, task]
+      }));
+    };
+    window.addEventListener('add_kanban_task', handleNewTask);
+    return () => window.removeEventListener('add_kanban_task', handleNewTask);
+  }, []);
 
   // 4. Milestones Timeline Data
   const milestonesData = [
@@ -70,6 +101,33 @@ const Projects = () => {
 
   const allowDrop = (e) => {
     e.preventDefault();
+  };
+
+  const handleSprintDragStart = (e, item, source) => {
+    e.dataTransfer.setData('itemId', item.id);
+    e.dataTransfer.setData('source', source);
+  };
+
+  const handleSprintDrop = (e, target) => {
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData('itemId');
+    const source = e.dataTransfer.getData('source');
+
+    if (source && source !== target) {
+      if (source === 'product' && target === 'sprint') {
+        const item = productBacklog.find(i => i.id === itemId);
+        if(item) {
+          setProductBacklog(prev => prev.filter(i => i.id !== itemId));
+          setSprintBacklog(prev => [...prev, item]);
+        }
+      } else if (source === 'sprint' && target === 'product') {
+        const item = sprintBacklog.find(i => i.id === itemId);
+        if(item) {
+          setSprintBacklog(prev => prev.filter(i => i.id !== itemId));
+          setProductBacklog(prev => [...prev, item]);
+        }
+      }
+    }
   };
 
   const renderBoard = () => {
@@ -193,21 +251,71 @@ const Projects = () => {
             <label>Story Points Target</label>
             <input type="number" placeholder="e.g. 50" defaultValue="40" />
           </div>
-          <button className={styles.startSprintBtn}><Play size={16} /> Start Sprint</button>
+          <button 
+            className={styles.startSprintBtn}
+            onClick={() => {
+              if (sprintBacklog.length > 0) {
+                const newTasks = sprintBacklog.map(item => ({
+                  id: item.id,
+                  title: item.title,
+                  points: item.points,
+                  priority: 'Medium',
+                  assignee: 'Unassigned',
+                  blocked: false
+                }));
+                setKanbanData(prev => ({
+                  ...prev,
+                  todo: [...prev.todo, ...newTasks]
+                }));
+                setSprintBacklog([]);
+              }
+              setActiveView('kanban');
+            }}
+          >
+            <Play size={16} /> Start Sprint
+          </button>
         </div>
       </div>
 
-      <div className={styles.backlogSection}>
+      <div 
+        className={styles.backlogSection}
+        onDragOver={allowDrop}
+        onDrop={(e) => handleSprintDrop(e, 'product')}
+      >
         <div className={styles.backlogHeader}>
           <h3 className={styles.sectionTitle}>Product Backlog</h3>
-          <p className={styles.backlogHelp}>Drag items from here to your sprint backlog.</p>
+          <p className={styles.backlogHelp}>Available backlog items.</p>
         </div>
         <div className={styles.backlogList}>
-          {backlogItems.map(item => (
-            <div key={item.id} className={styles.backlogItem} draggable>
+          {productBacklog.length === 0 && (
+            <div className={styles.emptyDropzone}>
+              No items in product backlog
+            </div>
+          )}
+          {productBacklog.map(item => (
+            <div 
+              key={item.id} 
+              className={`${styles.backlogItem} ${selectedTaskDetails?.id === item.id ? styles.activeBacklogItem : ''}`} 
+              onClick={() => setSelectedTaskDetails({...item, source: 'backlog'})}
+            >
               <div className={styles.bItemHeader}>
                 <span className={styles.bItemTitle}>{item.title}</span>
-                <MoreVertical size={14} className={styles.dragIcon} />
+                <div style={{ position: 'relative' }}>
+                  <MoreVertical 
+                    size={14} 
+                    className={styles.dragIcon} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDropdownId(openDropdownId === item.id ? null : item.id);
+                    }} 
+                  />
+                  {openDropdownId === item.id && (
+                    <div className={styles.dropdownMenu}>
+                      <button className={styles.dropdownItem} onClick={(e) => { e.stopPropagation(); setSelectedTaskDetails(item); setOpenDropdownId(null); }}>Show Details</button>
+                      <button className={styles.dropdownItem} onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); }}>Edit</button>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className={styles.bItemMeta}>
                 <span className={styles.bItemPoints}>{item.points} pts</span>
@@ -220,22 +328,24 @@ const Projects = () => {
     </div>
   );
 
-  const getPriorityColor = (prio) => {
-    switch (prio) {
-      case 'Critical': return '#ef4444';
-      case 'High': return '#f97316';
-      case 'Medium': return '#3b82f6';
-      default: return '#94a3b8';
+  const getPriorityStyle = (prio) => {
+    const p = prio.toUpperCase();
+    switch (p) {
+      case 'CRITICAL': 
+      case 'HIGH': return { color: '#ef4444', bg: '#fef2f2', border: '#ef4444' };
+      case 'MEDIUM': return { color: '#0f172a', bg: '#f1f5f9', border: '#0f172a' };
+      case 'LOW': return { color: '#10b981', bg: '#dcfce7', border: '#10b981' };
+      default: return { color: '#64748b', bg: '#f1f5f9', border: '#64748b' };
     }
   };
 
   const renderKanban = () => {
     const columns = [
-      { id: 'todo', title: 'To Do' },
-      { id: 'inProgress', title: 'In Progress' },
-      { id: 'codeReview', title: 'Code Review' },
-      { id: 'testing', title: 'Testing' },
-      { id: 'done', title: 'Done' }
+      { id: 'todo', title: 'TO DO', Icon: HelpCircle },
+      { id: 'inProgress', title: 'IN PROGRESS', Icon: Play },
+      { id: 'codeReview', title: 'CODE REVIEW', Icon: Eye },
+      { id: 'testing', title: 'TESTING', Icon: Search },
+      { id: 'completed', title: 'COMPLETED', Icon: CheckCircle }
     ];
 
     return (
@@ -248,30 +358,48 @@ const Projects = () => {
             onDrop={(e) => handleDrop(e, col.id)}
           >
             <div className={styles.kanbanColHeader}>
-              <h4>{col.title}</h4>
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <div className={styles.kColIcon}><col.Icon size={14} /></div>
+                <h4>{col.title}</h4>
+              </div>
               <span className={styles.kanbanCount}>{kanbanData[col.id].length}</span>
             </div>
             <div className={styles.kanbanTasks}>
-              {kanbanData[col.id].map(task => (
-                <div
-                  key={task.id}
-                  className={`${styles.kTaskCard} ${task.blocked ? styles.blockedTask : ''}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.id, col.id)}
-                >
-                  {task.blocked && <div className={styles.blockerFlag}><Flag size={12} /> Blocked</div>}
-                  <h5 className={styles.kTaskTitle}>{task.title}</h5>
-                  <div className={styles.kTaskMeta}>
-                    <span className={styles.kPriority} style={{ backgroundColor: getPriorityColor(task.priority) + '20', color: getPriorityColor(task.priority) }}>
-                      {task.priority}
-                    </span>
-                    <span className={styles.kPoints}>{task.points} pts</span>
+              {kanbanData[col.id].map(task => {
+                const prioStyle = getPriorityStyle(task.priority);
+                return (
+                  <div
+                    key={task.id}
+                    className={styles.kTaskCard}
+                    style={{ borderLeft: `4px solid ${prioStyle.border}` }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, task.id, col.id)}
+                    onClick={() => setSelectedTaskDetails({...task, colId: col.id})}
+                  >
+                    <div className={styles.kTaskTitleRow}>
+                      <AlertCircle size={14} style={{ color: '#ef4444', minWidth: '14px' }} />
+                      <h5 className={styles.kTaskTitle}>{task.title}</h5>
+                      <ChevronRight size={14} style={{ color: '#94a3b8', minWidth: '14px' }} />
+                    </div>
+                    
+                    <div className={styles.kTaskMetaRow}>
+                      <div className={styles.kMetaLeft}>
+                        <span className={styles.kPriorityBadge} style={{ color: prioStyle.color, backgroundColor: prioStyle.bg }}>
+                          {task.priority.toUpperCase()}
+                        </span>
+                        <span className={styles.kPoints}>{task.points} pts</span>
+                        <div className={styles.kDateBox}>
+                          <AlertTriangle size={12} style={{ color: '#94a3b8' }} />
+                          <span>{task.date}</span>
+                        </div>
+                      </div>
+                      <span className={styles.kProgressBadge}>
+                        {task.progress}% done
+                      </span>
+                    </div>
                   </div>
-                  <div className={styles.kTaskFooter}>
-                    <div className={styles.kAssignee}>{task.assignee}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
@@ -360,6 +488,242 @@ const Projects = () => {
         {activeProject && activeView === 'kanban' && renderKanban()}
         {activeProject && activeView === 'timeline' && renderTimeline()}
       </div>
+
+      {/* Backlog Item Form Modal */}
+      {selectedTaskDetails && selectedTaskDetails.source === 'backlog' && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedTaskDetails(null)}>
+          <div className={styles.modalContentLarge} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.mHeaderTitle}>Backlog Item Details</h2>
+              <button className={styles.closeModalBtn} onClick={() => setSelectedTaskDetails(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Task Title</label>
+                <input type="text" defaultValue={selectedTaskDetails.title} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Assignee</label>
+                <select defaultValue={selectedTaskDetails.assignee} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', appearance: 'auto' }}>
+                  <option>Select Team Member...</option>
+                  <option>Sarah Jenkins</option>
+                  <option>David Miller</option>
+                  <option>Bob Smith</option>
+                  <option>Michael Chang</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Description</label>
+              <textarea defaultValue={selectedTaskDetails.description} rows="4" style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', resize: 'vertical' }} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Story Points</label>
+                <input type="number" defaultValue={selectedTaskDetails.points} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Priority</label>
+                <select defaultValue={selectedTaskDetails.priority} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', appearance: 'auto' }}>
+                  <option>Critical</option>
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Project</label>
+                <select defaultValue={selectedTaskDetails.project} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', appearance: 'auto' }}>
+                  <option>NSG-ERP Core</option>
+                  <option>Infrastructure</option>
+                  <option>Video Huddles v2</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Sprint ID</label>
+                <select defaultValue="Backlog" style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', appearance: 'auto' }}>
+                  <option>Backlog</option>
+                  <option>Sprint 42</option>
+                  <option>Sprint 43</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Labels (Comma separated)</label>
+              <input type="text" defaultValue={selectedTaskDetails.labels} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc' }} />
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Acceptance Criteria</label>
+              <textarea defaultValue={selectedTaskDetails.criteria} rows="4" style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc', resize: 'vertical' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kanban Task Details Modal */}
+      {selectedTaskDetails && selectedTaskDetails.source !== 'backlog' && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedTaskDetails(null)}>
+          <div className={styles.modalContentLarge} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.mHeaderTitle}>{selectedTaskDetails.title}</h2>
+              <button className={styles.closeModalBtn} onClick={() => setSelectedTaskDetails(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className={styles.modalTwoColumn}>
+              {/* LEFT COLUMN */}
+              <div className={styles.modalLeft}>
+                <div className={styles.mBoxedRow}>
+                  <div className={styles.mBoxLeft}>
+                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#eff6ff', color: '#3b82f6' }}>
+                      <Menu size={16} />
+                    </div>
+                    <span className={styles.mBoxTitle}>ABOUT TASK</span>
+                    <span className={styles.mBoxSnippet}>Verify negative dates and overlaps li...</span>
+                  </div>
+                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                </div>
+                
+                <div className={styles.mBoxedRow}>
+                  <div className={styles.mBoxLeft}>
+                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#dcfce7', color: '#10b981' }}>
+                      <CheckSquare size={16} />
+                    </div>
+                    <span className={styles.mBoxTitle}>SUBTASK CHECKLIST</span>
+                    <span className={styles.mSubtaskBadge}>50% Completed</span>
+                    <span className={styles.mBoxSnippet}>1/2 done</span>
+                  </div>
+                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                </div>
+                
+                <div className={styles.mBoxedRow}>
+                  <div className={styles.mBoxLeft}>
+                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#f3e8ff', color: '#a855f7' }}>
+                      <Paperclip size={16} />
+                    </div>
+                    <span className={styles.mBoxTitle}>ATTACHMENTS</span>
+                    <span className={styles.mAttachmentBadge}>0 Files Attached</span>
+                  </div>
+                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                </div>
+                
+                <div className={styles.mBoxedRow}>
+                  <div className={styles.mBoxLeft}>
+                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+                      <MessageSquare size={16} />
+                    </div>
+                    <span className={styles.mBoxTitle}>DESCRIPTION</span>
+                    <span className={styles.mDescBadge}>Pending</span>
+                  </div>
+                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                </div>
+              </div>
+              
+              {/* RIGHT COLUMN */}
+              <div className={styles.modalRight}>
+                <div className={styles.mRightHeader}>
+                  <h4 className={styles.mRightTitle}>TASK PARAMETERS</h4>
+                  <button className={styles.mPortalBtn}>EMPLOYEE PORTAL VIEW</button>
+                </div>
+                
+                <div className={styles.mStatusSection}>
+                  <span className={styles.mLabel}>WORKFLOW STATUS</span>
+                  <select 
+                    className={styles.mStatusDropdownNative} 
+                    defaultValue={
+                      selectedTaskDetails.colId === 'inProgress' ? 'In Progress' :
+                      selectedTaskDetails.colId === 'codeReview' ? 'Code Review' :
+                      selectedTaskDetails.colId === 'testing' ? 'Testing' :
+                      selectedTaskDetails.colId === 'completed' ? 'Completed' :
+                      'To Do'
+                    }
+                  >
+                    <option>To Do</option>
+                    <option>In Progress</option>
+                    <option>Code Review</option>
+                    <option>Testing</option>
+                    <option>Completed</option>
+                  </select>
+                </div>
+                
+                <div className={styles.mMetaList}>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><KanbanSquare size={14} /> Project Name</div>
+                    <div className={styles.mMetaValueBox}>NSG ERP Platform</div>
+                  </div>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><Menu size={14} /> Task Name</div>
+                    <div className={styles.mMetaValueBox}>{selectedTaskDetails.title}</div>
+                  </div>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><User size={14} /> Assignee</div>
+                    <div className={styles.mAssigneeValue}>
+                      <div className={styles.mAssigneeAvatar}>
+                        {selectedTaskDetails ? getAssigneeDisplay(selectedTaskDetails.assignee).avatar : ''}
+                      </div>
+                      <span style={{fontWeight: 700, fontSize: '13px', color: '#0f172a'}}>
+                        {selectedTaskDetails ? getAssigneeDisplay(selectedTaskDetails.assignee).name : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><Info size={14} /> Priority Level</div>
+                    <div className={styles.mPriorityValue}>{selectedTaskDetails.priority.toUpperCase()}</div>
+                  </div>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><Clock size={14} /> Target Deadline</div>
+                    <div className={styles.mMetaValueBox}>{selectedTaskDetails.date || '2026-05-27'}</div>
+                  </div>
+                  <div className={styles.mMetaRow}>
+                    <div className={styles.mMetaLabel}><ListTodo size={14} /> Effort Estimate</div>
+                    <div className={styles.mMetaValueBox}>8h</div>
+                  </div>
+                  <div className={styles.mMetaRow} style={{alignItems: 'flex-start'}}>
+                    <div className={styles.mMetaLabel} style={{marginTop: '4px'}}><Tag size={14} /> Workspace Labels</div>
+                    <div className={styles.mLabelsList}>
+                      <span className={styles.mLabelBadge}>React 19</span>
+                      <span className={styles.mLabelBadge}>CSS Modules</span>
+                      <span className={styles.mLabelBadge}>ERP-v2</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className={styles.mProgressCard}>
+                  <div className={styles.mProgHeader}>
+                    <span className={styles.mProgTitle}>Overall Progress</span>
+                    <span className={styles.mProgPercent}>{selectedTaskDetails.progress || 50}%</span>
+                  </div>
+                  <div className={styles.mProgBarBg}>
+                    <div className={styles.mProgBarFill} style={{ width: `${selectedTaskDetails.progress || 50}%` }}></div>
+                  </div>
+                  <div className={styles.mProgFooter}>
+                    <span>1 of 2 subtasks done</span>
+                    <span>Desc Pending</span>
+                  </div>
+                </div>
+                
+                <div className={styles.mSecurityNotice}>
+                  <h5 className={styles.mSecTitle}>SECURITY NOTICE</h5>
+                  <p className={styles.mSecText}>
+                    Deadlines, priorities, and effort allocation rules are locked under organizational policies and are editable only by managers.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

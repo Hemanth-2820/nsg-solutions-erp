@@ -24,21 +24,47 @@ const Tasks = () => {
   
   const [taskTitle, setTaskTitle] = useState('');
 
+  const [taskPoints, setTaskPoints] = useState('');
+  const [taskPriority, setTaskPriority] = useState('Medium');
+  const [taskAssignee, setTaskAssignee] = useState('Select Team Member...');
+
   const handleCreateTask = (e) => {
     e.preventDefault();
+    
+    if(!taskTitle.trim()) {
+      alert("Please enter a task title");
+      return;
+    }
+
     const newTask = {
       id: Date.now(),
       project: 'NSG-ERP Core',
       title: taskTitle.trim() || 'Untitled Task',
-      assignee: 'Unassigned',
-      avatar: '?',
-      priority: 'Medium',
+      assignee: taskAssignee === 'Select Team Member...' ? 'Unassigned' : taskAssignee,
+      avatar: taskAssignee !== 'Select Team Member...' ? taskAssignee.split(' ').map(n => n[0]).join('') : 'UN',
+      priority: taskPriority,
       status: 'To Do',
-      points: 1,
+      points: parseInt(taskPoints) || 1,
       due: 'TBD'
     };
+    
     setTaskList([...taskList, newTask]);
+    
+    // Dispatch to global kanban board in Projects module
+    const kanbanTask = {
+      id: `t${Date.now()}`,
+      title: newTask.title,
+      points: newTask.points,
+      priority: newTask.priority,
+      assignee: newTask.avatar,
+      blocked: false
+    };
+    window.dispatchEvent(new CustomEvent('add_kanban_task', { detail: kanbanTask }));
+
     setTaskTitle('');
+    setTaskPoints('');
+    setTaskPriority('Medium');
+    setTaskAssignee('Select Team Member...');
     setSubtasks(['']);
     setActiveView('list');
   };
@@ -119,7 +145,11 @@ const Tasks = () => {
 
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Assignee</label>
-                <select className={styles.formSelect}>
+                <select 
+                  className={styles.formSelect}
+                  value={taskAssignee}
+                  onChange={(e) => setTaskAssignee(e.target.value)}
+                >
                   <option>Select Team Member...</option>
                   <option>Sarah Jenkins</option>
                   <option>Michael Chang</option>
@@ -134,12 +164,22 @@ const Tasks = () => {
 
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Story Points</label>
-                <input type="number" className={styles.formInput} placeholder="e.g. 3, 5, 8" />
+                <input 
+                  type="number" 
+                  className={styles.formInput} 
+                  placeholder="e.g. 3, 5, 8" 
+                  value={taskPoints}
+                  onChange={(e) => setTaskPoints(e.target.value)}
+                />
               </div>
 
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Priority</label>
-                <select className={styles.formSelect}>
+                <select 
+                  className={styles.formSelect}
+                  value={taskPriority}
+                  onChange={(e) => setTaskPriority(e.target.value)}
+                >
                   <option>Low</option>
                   <option>Medium</option>
                   <option>High</option>

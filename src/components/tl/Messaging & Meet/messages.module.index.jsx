@@ -198,20 +198,27 @@ const Messages = ({ initialSelectedChannel }) => {
   
   const [employees, setEmployees] = useState([
     { id: 1, name: 'Alice Chen', avatar: 'https://ui-avatars.com/api/?name=Alice+Chen&background=0D8ABC&color=fff', status: 'Active' },
-    { id: 2, name: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 3, name: 'Michael Chang', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 4, name: 'Emily Rodriguez', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 5, name: 'David Miller', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'On Leave' },
+    { id: 2, name: 'Bob Smith', avatar: 'https://ui-avatars.com/api/?name=Bob+Smith&background=3B82F6&color=fff', status: 'Active' },
+    { id: 3, name: 'Charlie Davis', avatar: 'https://ui-avatars.com/api/?name=Charlie+Davis&background=6B7280&color=fff', status: 'Active' },
+    { id: 4, name: 'Diana Prince', avatar: 'https://ui-avatars.com/api/?name=Diana+Prince&background=F59E0B&color=fff', status: 'On Leave' },
+    { id: 5, name: 'Evan Wright', avatar: 'https://ui-avatars.com/api/?name=Evan+Wright&background=EF4444&color=fff', status: 'Active' },
     { id: 6, name: 'Fiona Gallagher', avatar: 'https://ui-avatars.com/api/?name=Fiona+Gallagher&background=10B981&color=fff', status: 'Active' },
+    { id: 7, name: 'George Hale', avatar: 'https://ui-avatars.com/api/?name=George+Hale&background=3B82F6&color=fff', status: 'Active' },
     { id: 8, name: 'Hannah Lee', avatar: 'https://ui-avatars.com/api/?name=Hannah+Lee&background=F59E0B&color=fff', status: 'Active' },
-    { id: 11, name: 'Kevin Taylor', avatar: 'https://ui-avatars.com/api/?name=Kevin+Taylor&background=8B5CF6&color=fff', status: 'Active' }
+    { id: 9, name: 'Ivy Green', avatar: 'https://ui-avatars.com/api/?name=Ivy+Green&background=EF4444&color=fff', status: 'Active' },
+    { id: 10, name: 'Jack White', avatar: 'https://ui-avatars.com/api/?name=Jack+White&background=EF4444&color=fff', status: 'Active' },
+    { id: 11, name: 'Kevin Taylor', avatar: 'https://ui-avatars.com/api/?name=Kevin+Taylor&background=8B5CF6&color=fff', status: 'Active' },
+    { id: 12, name: 'Michael Chang', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100', status: 'Active' },
+    { id: 102, name: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', status: 'Active' },
+    { id: 104, name: 'Emily Rodriguez', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=100', status: 'Active' },
+    { id: 105, name: 'David Miller', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'On Leave' }
   ]);
 
   const globalDirectory = [
-    { id: 6, name: 'Sophia Patel', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100', status: 'On Leave', role: 'Marketing Specialist' },
-    { id: 7, name: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Frontend Developer Candidate' },
-    { id: 8, name: 'Jessica Chen', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Product Manager Candidate' },
-    { id: 9, name: 'Liam O\'Connor', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'DevOps Candidate' }
+    { id: 106, name: 'Sophia Patel', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100', status: 'On Leave', role: 'Marketing Specialist' },
+    { id: 107, name: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Frontend Developer Candidate' },
+    { id: 108, name: 'Jessica Chen', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Product Manager Candidate' },
+    { id: 109, name: 'Liam O\'Connor', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'DevOps Candidate' }
   ];
 
   const [messages, setMessages] = useState({
@@ -229,30 +236,48 @@ const Messages = ({ initialSelectedChannel }) => {
     'hr-room': [
       { id: 1, sender: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', text: 'Please review all outstanding leave requests by Friday.', timestamp: '09:00 AM' }
     ],
-    'dm-3': [
+    'dm-12': [
       { id: 1, sender: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', text: 'Hi Michael, did you get a chance to look at the onboarding tasks?', timestamp: 'Yesterday' },
       { id: 2, sender: 'Michael Chang', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100', text: 'Yes Sarah! Finished the database structures and directory mappings.', timestamp: 'Yesterday' }
     ],
-    'dm-4': [
+    'dm-104': [
       { id: 1, sender: 'Emily Rodriguez', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=100', text: 'Hey Sarah, let me know when the new messages UI is ready for styling review.', timestamp: '11:20 AM' }
     ],
-    'dm-5': [
+    'dm-105': [
       { id: 1, sender: 'David Miller', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', text: 'Hey, I am going on leave starting today. Let me know if anything urgent comes up with the ERP huddles.', timestamp: '10:45 AM' }
     ],
-    'dm-2': [
+    'dm-102': [
       { id: 1, sender: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', text: 'Personal notes: remember to check the CSS module class naming standard and complete task lists.', timestamp: '09:00 AM' }
     ],
-    'dm-6': [
+    'dm-106': [
       { id: 1, sender: 'Sophia Patel', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100', text: 'Hey Sarah, I am on leave today but will check back tomorrow.', timestamp: '09:00 AM' }
     ],
-    'dm-7': [
+    'dm-107': [
       { id: 1, sender: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=100', text: 'Hi Sarah! Thanks for reaching out. Ready for my technical interview evaluation.', timestamp: '12:00 PM' }
     ],
-    'dm-8': [
+    'dm-108': [
       { id: 1, sender: 'Jessica Chen', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100', text: 'Hello, looking forward to discussing the Product Manager position!', timestamp: '01:15 PM' }
     ],
-    'dm-9': [
+    'dm-109': [
       { id: 1, sender: 'Liam O\'Connor', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', text: 'Hey Sarah, let me know if you want to walk through the pipeline review.', timestamp: '10:30 AM' }
+    ],
+    'dm-7': [
+      { id: 1, sender: 'George Hale', avatar: 'https://ui-avatars.com/api/?name=George+Hale&background=3B82F6&color=fff', text: 'Hey Sarah, the AWS instances are provisioned.', timestamp: '09:00 AM' }
+    ],
+    'dm-9': [
+      { id: 1, sender: 'Ivy Green', avatar: 'https://ui-avatars.com/api/?name=Ivy+Green&background=EF4444&color=fff', text: 'Hey Sarah, the new models are converging nicely.', timestamp: '10:00 AM' }
+    ],
+    'dm-1': [
+      { id: 1, sender: 'Alice Chen', avatar: 'https://ui-avatars.com/api/?name=Alice+Chen&background=0D8ABC&color=fff', text: 'Hey, I pushed the frontend changes. Can you review?', timestamp: '09:30 AM' }
+    ],
+    'dm-6': [
+      { id: 1, sender: 'Fiona Gallagher', avatar: 'https://ui-avatars.com/api/?name=Fiona+Gallagher&background=10B981&color=fff', text: 'The new API endpoints are live in staging.', timestamp: '11:00 AM' }
+    ],
+    'dm-8': [
+      { id: 1, sender: 'Hannah Lee', avatar: 'https://ui-avatars.com/api/?name=Hannah+Lee&background=F59E0B&color=fff', text: 'Here are the updated design specs for the dashboard!', timestamp: '10:15 AM' }
+    ],
+    'dm-11': [
+      { id: 1, sender: 'Kevin Taylor', avatar: 'https://ui-avatars.com/api/?name=Kevin+Taylor&background=8B5CF6&color=fff', text: 'QA passed for the new Approvals module.', timestamp: '02:00 PM' }
     ]
   });
 

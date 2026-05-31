@@ -100,9 +100,9 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
       { id: 2, name: 'George Hale', desc: 'Date: Friday, May 15', employeeNote: 'Need to stay home for emergency childcare.' }
     ],
     absentAlerts: [
-      { id: 5, name: 'Evan Wright', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' },
-      { id: 9, name: 'Ivy Green', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' },
-      { id: 10, name: 'Jack White', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' }
+      { id: 5, name: 'Evan Wright', initials: 'EW', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' },
+      { id: 9, name: 'Ivy Green', initials: 'IG', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' },
+      { id: 10, name: 'Jack White', initials: 'JW', desc: 'Date: Today - Unexplained Absence', employeeNote: 'No leave request filed. Requires follow-up.' }
     ]
   });
 
@@ -134,16 +134,6 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
     wfhRequests: pendingDetails.wfhRequests.length
   };
 
-
-  // 4. Today's Absent Alert Data
-  const absentAlerts = teamMembers
-    .filter(member => member.status === 'absent')
-    .map(member => ({
-      id: member.id,
-      name: member.name,
-      initials: member.initials,
-      reason: 'Unexplained Absence - No leave request filed'
-    }));
 
   if (currentView !== 'main') {
     const title = currentView === 'leave' ? 'Leave Requests' : 
@@ -422,7 +412,7 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
             </div>
           </div>
           <div className={styles.alertList}>
-            {absentAlerts.map(alert => (
+            {pendingDetails.absentAlerts.map(alert => (
               <div 
                 key={alert.id} 
                 className={styles.alertCard}

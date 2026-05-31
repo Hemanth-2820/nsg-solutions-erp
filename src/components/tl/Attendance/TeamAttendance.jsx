@@ -191,25 +191,6 @@ const TeamAttendance = ({ onBack }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      
-      {/* Back Button Container */}
-      <div>
-        <button 
-          onClick={onBack}
-          style={{ 
-            background: 'none', 
-            border: 'none', 
-            color: '#6b7280', 
-            fontWeight: '600', 
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            fontSize: '14px'
-          }}
-        >
-          ← Back to Attendance Dashboard
-        </button>
-      </div>
 
       <div className={styles.teamDashboardGrid}>
         

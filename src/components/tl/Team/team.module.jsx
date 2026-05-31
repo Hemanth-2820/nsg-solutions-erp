@@ -152,27 +152,28 @@ const TeamDirectory = () => {
         </button>
       </div>
 
+      {activeView === 'members' && (
+        <div style={{ position: 'relative', width: '100%', background: 'white', borderRadius: '12px', border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-sm)' }}>
+          <Search size={18} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input 
+            type="text" 
+            placeholder="Search employees..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ 
+              width: '100%', padding: '18px 24px 18px 52px', borderRadius: '12px', 
+              border: 'none', background: 'transparent', 
+              color: 'var(--text-main)', fontSize: '15px', outline: 'none'
+            }} 
+          />
+        </div>
+      )}
+
       <div className={styles.viewContainer}>
         
         {/* View 1: My Team Members List */}
         {activeView === 'members' && (
           <div>
-            <div className={styles.topToolbar} style={{ marginBottom: '24px', justifyContent: 'flex-end', padding: '12px 24px' }}>
-              <div style={{ position: 'relative', width: '300px' }}>
-                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input 
-                  type="text" 
-                  placeholder="Search employees..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ 
-                    width: '100%', padding: '10px 12px 10px 36px', borderRadius: '8px', 
-                    border: '1px solid var(--border-input)', background: 'transparent', 
-                    color: 'var(--text-main)', fontSize: '14px', outline: 'none'
-                  }} 
-                />
-              </div>
-            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div className={styles.sectionTitle} style={{ margin: 0 }}>Team Profile Overview</div>
               {!searchQuery && (
