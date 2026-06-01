@@ -162,7 +162,7 @@ function DayTotalBadge({ total }) {
 
 // ─── Main Timesheet ───────────────────────────────────────────────────────────
 
-export default function Timesheet() {
+export default function Timesheet({ db, onUpdateDb }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [rows, setRows] = useState(() =>
     SPRINT_TASKS.slice(0, 3).map(t => ({
@@ -183,35 +183,101 @@ export default function Timesheet() {
   const total = weekTotal(rows);
   const allDaysFilled = DAYS.every(d => colTotal(rows, d) >= 8);
   const canSubmit = allDaysFilled && status === 'draft';
-  const isLocked = status === 'submitted';
+  const isLocked = status === 'submitted' || status === 'approved';
 
+  // Sync with central database on weekOffset change or db update
   useEffect(() => {
-    if (status !== 'draft') return;
-    clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      console.log('Auto-saved draft');
-    }, 2000);
-    return () => clearTimeout(autoSaveTimer.current);
-  }, [rows, status]);
+    if (!db) return;
+    const weekStartDateStr = dates[0].toISOString().slice(0, 10);
+    const match = (db.timesheets || []).find(t => t.employee_id === 102 && t.week_start_date === weekStartDateStr);
+    
+    if (match) {
+      setRows(match.rows || []);
+      setStatus(match.status || 'draft');
+      setRejectedReason(match.rejection_comment || '');
+    } else {
+      // Default to empty draft for the week
+      setRows(SPRINT_TASKS.slice(0, 3).map(t => ({
+        taskId: t.id,
+        name: t.name,
+        sprint: t.sprint,
+        hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
+      })));
+      setStatus('draft');
+      setRejectedReason('');
+    }
+  }, [weekOffset, db]);
+
+  // Autosave draft edits to global database
+  const triggerAutoSave = (updatedRows) => {
+    if (!db || !onUpdateDb || status === 'submitted' || status === 'approved') return;
+    const weekStartDateStr = dates[0].toISOString().slice(0, 10);
+    
+    const existingTimesheets = db.timesheets || [];
+    const index = existingTimesheets.findIndex(t => t.employee_id === 102 && t.week_start_date === weekStartDateStr);
+    
+    let updatedTimesheets = [...existingTimesheets];
+    const tsObject = {
+      id: index >= 0 ? existingTimesheets[index].id : +new Date(),
+      employee_id: 102,
+      week_start_date: weekStartDateStr,
+      status: 'draft',
+      rejection_comment: '',
+      rows: updatedRows
+    };
+
+    if (index >= 0) {
+      updatedTimesheets[index] = tsObject;
+    } else {
+      updatedTimesheets.push(tsObject);
+    }
+
+    onUpdateDb({
+      ...db,
+      timesheets: updatedTimesheets
+    });
+  };
 
   function updateHours(rowIdx, day, val) {
-    setRows(prev => prev.map((r, i) =>
+    const updatedRows = rows.map((r, i) =>
       i === rowIdx ? { ...r, hours: { ...r.hours, [day]: val } } : r
-    ));
+    );
+    setRows(updatedRows);
+    triggerAutoSave(updatedRows);
   }
 
   function removeRow(rowIdx) {
-    setRows(prev => prev.filter((_, i) => i !== rowIdx));
+    const updatedRows = rows.filter((_, i) => i !== rowIdx);
+    setRows(updatedRows);
+    triggerAutoSave(updatedRows);
   }
 
   function addTask(task) {
-    setRows(prev => [...prev, {
+    const updatedRows = [...rows, {
       taskId: task.id, name: task.name, sprint: task.sprint,
       hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-    }]);
+    }];
+    setRows(updatedRows);
+    triggerAutoSave(updatedRows);
   }
 
   function handleSubmit() {
+    if (!db || !onUpdateDb) return;
+    const weekStartDateStr = dates[0].toISOString().slice(0, 10);
+    const updatedTimesheets = (db.timesheets || []).map(t => {
+      if (t.employee_id === 102 && t.week_start_date === weekStartDateStr) {
+        return {
+          ...t,
+          status: 'submitted'
+        };
+      }
+      return t;
+    });
+
+    onUpdateDb({
+      ...db,
+      timesheets: updatedTimesheets
+    });
     setStatus('submitted');
     setShowSubmitModal(false);
   }

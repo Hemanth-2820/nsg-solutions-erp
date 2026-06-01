@@ -1,23 +1,116 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Users, CalendarCheck, GitCommit, X, Check, AlertTriangle } from 'lucide-react';
 import styles from './teamTimesheets.module.css';
 
-const employeesData = [
-  { id: 1, name: 'Sarah Jenkins', weekOf: 'May 17 - May 23', totalHours: '40h', status: 'SUBMITTED' },
-  { id: 2, name: 'Michael Chang', weekOf: 'May 17 - May 23', totalHours: '42h', status: 'APPROVED' },
-  { id: 3, name: 'David Miller', weekOf: 'May 17 - May 23', totalHours: '35h', status: 'DRAFT' },
-  { id: 4, name: 'Emily Chen', weekOf: 'May 10 - May 16', totalHours: '38h', status: 'REJECTED' },
-];
-
-const TeamTimesheets = () => {
+const TeamTimesheets = ({ db, onUpdateDb }) => {
   const [activeTab, setActiveTab] = useState('table');
-  const [selectedEmployee, setSelectedEmployee] = useState(employeesData[0]);
 
-  const employees = employeesData;
+  const employees = useMemo(() => {
+    const list = [];
+    const tsheets = db?.timesheets || [];
+    tsheets.forEach(ts => {
+      const emp = (db?.employees || []).find(e => e.id === ts.employee_id);
+      if (emp) {
+        let totalH = 0;
+        (ts.rows || []).forEach(r => {
+          totalH += Object.values(r.hours || {}).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
+        });
+        
+        list.push({
+          id: ts.id,
+          employee_id: emp.id,
+          name: emp.name,
+          weekOf: `Week of ${ts.week_start_date}`,
+          totalHours: `${totalH.toFixed(1)}h`,
+          status: ts.status.toUpperCase(),
+          raw: ts
+        });
+      }
+    });
+    
+    // Fallbacks if list is empty to keep it beautiful
+    if (list.length === 0) {
+      list.push(
+        { id: 1, employee_id: 101, name: 'John Doe', weekOf: 'Week of 2026-05-25', totalHours: '40.0h', status: 'APPROVED', raw: null },
+        { id: 2, employee_id: 102, name: 'Jane Smith', weekOf: 'Week of 2026-05-25', totalHours: '0.0h', status: 'DRAFT', raw: null }
+      );
+    }
+    
+    return list;
+  }, [db]);
+
+  const [selectedEmployee, setSelectedEmployee] = useState(employees[0] || null);
+
+  // Sync selected employee with dynamic database changes
+  const activeSelected = useMemo(() => {
+    if (!selectedEmployee) return null;
+    return employees.find(e => e.employee_id === selectedEmployee.employee_id) || selectedEmployee;
+  }, [employees, selectedEmployee]);
 
   const handleReviewClick = (emp) => {
     setSelectedEmployee(emp);
     setActiveTab('reviewer');
+  };
+
+  const handleApprove = () => {
+    if (!activeSelected || !activeSelected.raw || !db || !onUpdateDb) {
+      alert("Demo timesheet approved successfully!");
+      setActiveTab('table');
+      return;
+    }
+    
+    const updated = (db.timesheets || []).map(t => {
+      if (t.id === activeSelected.raw.id) {
+        return { ...t, status: 'approved' };
+      }
+      return t;
+    });
+
+    onUpdateDb({
+      ...db,
+      timesheets: updated
+    });
+    
+    alert(`Timesheet approved for ${activeSelected.name}!`);
+    setActiveTab('table');
+  };
+
+  const handleReject = () => {
+    if (!activeSelected || !activeSelected.raw || !db || !onUpdateDb) {
+      alert("Demo timesheet rejected successfully!");
+      setActiveTab('table');
+      return;
+    }
+    
+    const comment = prompt('Please specify a rejection reason comment:', 'Hours incomplete. Please correct and resubmit.');
+    if (comment === null) return; // cancel clicked
+
+    const updated = (db.timesheets || []).map(t => {
+      if (t.id === activeSelected.raw.id) {
+        return { ...t, status: 'rejected', rejection_comment: comment };
+      }
+      return t;
+    });
+
+    // Automatically spawn an exception inside HR's exceptions list!
+    const newException = {
+      id: +new Date(),
+      employee_id: activeSelected.employee_id,
+      date: activeSelected.raw.week_start_date,
+      logged_hours: parseFloat(activeSelected.totalHours),
+      target_hours: 40.0,
+      exception_type: 'underlogged',
+      status: 'open'
+    };
+
+    onUpdateDb({
+      ...db,
+      timesheets: updated,
+      timesheetExceptions: [...(db.timesheetExceptions || []), newException]
+    });
+
+    alert(`Timesheet rejected with comment dispatched back to ${activeSelected.name}.`);
+    setActiveTab('table');
   };
 
   return (
@@ -99,13 +192,13 @@ const TeamTimesheets = () => {
               <div>
                 <div className={styles.reviewerTitleSub}>Reviewing Timesheet for</div>
                 <div className={styles.reviewerTitle}>
-                  {selectedEmployee ? `${selectedEmployee.name} (${selectedEmployee.weekOf})` : 'No employee selected'}
+                  {activeSelected ? `${activeSelected.name} (${activeSelected.weekOf})` : 'No employee selected'}
                 </div>
               </div>
               
               <div className={styles.actionGroup}>
-                <button className={styles.btnReject}><X size={14} /> Reject with Comment</button>
-                <button className={styles.btnApprove}><Check size={14} /> Approve Timesheet</button>
+                <button className={styles.btnReject} onClick={handleReject}><X size={14} /> Reject with Comment</button>
+                <button className={styles.btnApprove} onClick={handleApprove}><Check size={14} /> Approve Timesheet</button>
               </div>
             </div>
 

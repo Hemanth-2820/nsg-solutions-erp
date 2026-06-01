@@ -39,6 +39,21 @@ const INITIAL_RESIGNATIONS = [
   }
 ];
 
+const INITIAL_TIMESHEETS = [
+  {
+    id: 1,
+    employee_id: 102, // Jane Smith
+    week_start_date: '2026-05-25',
+    status: 'draft',
+    rejection_comment: '',
+    rows: [
+      { taskId: 1, name: 'API Integration – Auth Module', sprint: 'Sprint 14', hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 } },
+      { taskId: 2, name: 'UI Fix – Dashboard Cards', sprint: 'Sprint 14', hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 } },
+      { taskId: 3, name: 'Code Review – PR #204', sprint: 'Sprint 14', hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 } }
+    ]
+  }
+];
+
 export default function App() {
   const loadDbSync = () => {
     const localData = localStorage.getItem('nsg_hr_db');
@@ -47,6 +62,7 @@ export default function App() {
         const parsed = JSON.parse(localData);
         if (!parsed.attendanceCorrections) parsed.attendanceCorrections = [];
         if (!parsed.resignations) parsed.resignations = INITIAL_RESIGNATIONS;
+        if (!parsed.timesheets) parsed.timesheets = INITIAL_TIMESHEETS;
         
         // Remove pre-seeded mock logs & corrections for active testing employee ID 102
         // This ensures a completely blank sheet so only your live actions show up!
@@ -84,7 +100,8 @@ export default function App() {
       chatRooms: INITIAL_CHAT_ROOMS,
       auditLogs: INITIAL_AUDIT_LOGS,
       attendanceCorrections: [],
-      resignations: INITIAL_RESIGNATIONS
+      resignations: INITIAL_RESIGNATIONS,
+      timesheets: INITIAL_TIMESHEETS
     };
     localStorage.setItem('nsg_hr_db', JSON.stringify(seed));
     return seed;

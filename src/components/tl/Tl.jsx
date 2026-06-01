@@ -20,7 +20,7 @@ export default function Tl({ activeTab, setActiveTab, db, onUpdateDb }) {
       {activeTab === 'projects' && <Projects />}
       {activeTab === 'tasks' && <Tasks />}
       {activeTab === 'attendance' && <Attendance db={db} onUpdateDb={onUpdateDb} />}
-      {activeTab === 'timesheets' && <Timesheets />}
+      {activeTab === 'timesheets' && <Timesheets db={db} onUpdateDb={onUpdateDb} />}
       {activeTab === 'approvals' && <Approvals />}
       {activeTab === 'reports' && <Reports />}
       {activeTab === 'escalations' && <Escalations />}

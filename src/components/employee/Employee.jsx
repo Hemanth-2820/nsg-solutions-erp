@@ -16,7 +16,7 @@ export default function Employee({ activeTab, db, onUpdateDb }) {
   }
 
   if (activeTab === 'timesheet') {
-    return <Timesheet />;
+    return <Timesheet db={db} onUpdateDb={onUpdateDb} />;
   }
 
   if (activeTab === 'tasks') {
