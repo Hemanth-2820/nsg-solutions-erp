@@ -1,0 +1,315 @@
+import { useState, useEffect } from 'react';
+import ResignationForm from './ResignationForm';
+import NoticeTracker from './NoticeTracker';
+import ExitChecklist from './ExitChecklist';
+import { Calendar, CheckCircle2, XCircle } from 'lucide-react';
+
+const defaultChecklist = [
+  { id: 'handover', label: 'Handover tasks', completed: false },
+  { id: 'laptop', label: 'Laptop return', completed: false },
+  { id: 'access_card', label: 'Access card return', completed: false },
+  { id: 'kt_upload', label: 'KT document upload', completed: false, fileName: null }
+];
+
+export default function Resignation() {
+  // --- States ---
+  const [resignationData, setResignationData] = useState(() => {
+    const saved = localStorage.getItem('nsg_employee_resignation_data');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [checklist, setChecklist] = useState(() => {
+    const saved = localStorage.getItem('nsg_employee_resignation_checklist');
+    return saved ? JSON.parse(saved) : defaultChecklist;
+  });
+
+  const [earlyReliefStatus, setEarlyReliefStatus] = useState(() => {
+    return localStorage.getItem('nsg_employee_resignation_early_relief') || null;
+  });
+
+  const [toast, setToast] = useState(null);
+
+  // --- LocalStorage Sync ---
+  useEffect(() => {
+    if (resignationData) {
+      localStorage.setItem('nsg_employee_resignation_data', JSON.stringify(resignationData));
+    } else {
+      localStorage.removeItem('nsg_employee_resignation_data');
+    }
+  }, [resignationData]);
+
+  useEffect(() => {
+    localStorage.setItem('nsg_employee_resignation_checklist', JSON.stringify(checklist));
+  }, [checklist]);
+
+  useEffect(() => {
+    if (earlyReliefStatus) {
+      localStorage.setItem('nsg_employee_resignation_early_relief', earlyReliefStatus);
+    } else {
+      localStorage.removeItem('nsg_employee_resignation_early_relief');
+    }
+  }, [earlyReliefStatus]);
+
+  // --- Handlers ---
+  const handleResignSubmit = (data) => {
+    // Add simulated served days
+    const submission = {
+      ...data,
+      daysServed: 8 // default simulated days served for testing notice progress
+    };
+    setResignationData(submission);
+    showToast('Resignation submitted successfully.');
+  };
+
+  const handleToggleTask = (taskId) => {
+    const updated = checklist.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          completed: !t.completed,
+          fileName: t.id === 'kt_upload' && t.completed ? null : t.fileName
+        };
+      }
+      return t;
+    });
+    setChecklist(updated);
+    showToast('Checklist task updated.');
+  };
+
+  const handleUploadKTDoc = (fileName) => {
+    const updated = checklist.map(t => {
+      if (t.id === 'kt_upload') {
+        return {
+          ...t,
+          completed: true,
+          fileName: fileName
+        };
+      }
+      return t;
+    });
+    setChecklist(updated);
+    showToast('KT document uploaded successfully.');
+  };
+
+  const handleRequestEarlyRelief = () => {
+    setEarlyReliefStatus('requested');
+    showToast('Early relief requested.');
+  };
+
+  const handleSimulateApproveEarlyRelief = () => {
+    if (!resignationData) return;
+    
+    // Simulate updating LWD to be closer
+    const newLwd = new Date();
+    newLwd.setDate(newLwd.getDate() + 5); // 5 days from today
+    
+    setResignationData({
+      ...resignationData,
+      lwdDate: newLwd.toISOString().split('T')[0],
+      daysServed: 25 // bump served days close to completion
+    });
+    setEarlyReliefStatus('approved');
+    showToast('Early relief approved! LWD rescheduled.');
+  };
+
+  const handleResetResignation = () => {
+    setResignationData(null);
+    setChecklist(defaultChecklist);
+    setEarlyReliefStatus(null);
+    showToast('Resignation state reset for testing.');
+  };
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  return (
+    <div className="component-container">
+      {/* Dynamic styles for grid responsiveness & slide transitions */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .resignation-layout-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+
+        .area-tracker { order: 1; }
+        .area-main { order: 2; }
+        .area-checklist { order: 3; }
+
+        @media (min-width: 1024px) {
+          .resignation-layout-grid {
+            grid-template-columns: 1.2fr 1fr;
+            grid-template-areas: 
+              "main tracker"
+              "checklist checklist";
+          }
+          .area-main { grid-area: main; order: unset; }
+          .area-tracker { grid-area: tracker; order: unset; }
+          .area-checklist { grid-area: checklist; order: unset; }
+        }
+
+        .status-card {
+          background-color: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 12px;
+          padding: 28px;
+          box-shadow: var(--shadow-sm);
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+      ` }} />
+
+      {/* Success Toast Notification */}
+      {toast && (
+        <div className="toast-notify">
+          <CheckCircle2 size={16} style={{ color: 'var(--accent-green)' }} />
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="component-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1>Resignation Portal</h1>
+          <p>Manage departure submissions, notice duration tracking, and clear exit clearing checklists.</p>
+        </div>
+        
+        {/* Prototype controller tools */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {resignationData && (
+            <>
+              {earlyReliefStatus === 'requested' && (
+                <button
+                  type="button"
+                  onClick={handleSimulateApproveEarlyRelief}
+                  style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    color: 'var(--accent-green)',
+                    border: '1px dashed var(--accent-green)',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <CheckCircle2 size={12} />
+                  <span>Approve Early Relief (test)</span>
+                </button>
+              )}
+              
+              <button
+                type="button"
+                onClick={handleResetResignation}
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  color: '#ef4444',
+                  border: '1px dashed #ef4444',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <XCircle size={12} />
+                <span>Withdraw / Reset (test)</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Main Grid Layout */}
+      <div className="resignation-layout-grid">
+        
+        {/* left/main area: Form OR Submission status card */}
+        <div className="area-main">
+          {resignationData ? (
+            /* RESIGNED State card */
+            <div className="status-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-green)' }}>
+                <CheckCircle2 size={24} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    Resignation Submitted
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Submitted on {resignationData.submissionDate}
+                  </span>
+                </div>
+              </div>
+
+              <div 
+                style={{
+                  borderTop: '1px solid var(--border-color)',
+                  borderBottom: '1px solid var(--border-color)',
+                  padding: '16px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  fontSize: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Effective Resignation Date</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{resignationData.submissionDate}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Requested Last Working Day (LWD)</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{resignationData.lwdDate}</span>
+                </div>
+                {resignationData.reason && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Reason Provided</span>
+                    <p style={{ margin: 0, padding: '10px', borderRadius: '6px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: '1.4' }}>
+                      "{resignationData.reason}"
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                <Calendar size={14} />
+                <span>Exit checklist clearing is currently active. HR clearance is pending LWD confirmation.</span>
+              </div>
+            </div>
+          ) : (
+            /* NOT-RESIGNED State form */
+            <ResignationForm onSubmit={handleResignSubmit} />
+          )}
+        </div>
+
+        {/* right/tracker area: Notice period countdown / progress bar */}
+        <div className="area-tracker">
+          <NoticeTracker 
+            resignationData={resignationData}
+            onRequestEarlyRelief={handleRequestEarlyRelief}
+            earlyReliefStatus={earlyReliefStatus}
+          />
+        </div>
+
+        {/* bottom area: Exit checklist items list */}
+        {resignationData && (
+          <div className="area-checklist">
+            <ExitChecklist 
+              checklist={checklist}
+              onToggleTask={handleToggleTask}
+              onUploadKTDoc={handleUploadKTDoc}
+            />
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
