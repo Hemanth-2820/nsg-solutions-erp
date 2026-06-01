@@ -13,11 +13,24 @@ const defaultClaims = [
   { id: 'EXP-104', date: '2026-05-25', category: 'client', amount: 1200, description: 'Dinner with international stakeholder', tlStatus: 'denied', hrStatus: 'pending', payrollStatus: 'pending', receiptName: 'restaurant_bill.png' }
 ];
 
-export default function Expenses() {
-  const [claims, setClaims] = useState(() => {
-    const saved = localStorage.getItem('nsg_employee_expense_claims');
-    return saved ? JSON.parse(saved) : defaultClaims;
-  });
+export default function Expenses({ db, onUpdateDb }) {
+  // Read and filter claims from the central database
+  const employeeClaims = db
+    ? (db.expenseClaims || []).filter(c => c.employee_id === 102)
+    : defaultClaims;
+
+  // Map database fields to the UI-compatible fields, sorting so newest is first
+  const claims = [...employeeClaims]
+    .map(c => ({
+      ...c,
+      id: c.id || `EXP-${c.id}`,
+      date: c.claim_date || c.date || '',
+      receiptName: c.receipt_url || c.receiptName || 'receipt.pdf',
+      tlStatus: c.tl_approval || c.tlStatus || 'pending',
+      hrStatus: c.hr_approval || c.hrStatus || 'pending',
+      payrollStatus: c.status || c.payrollStatus || 'pending'
+    }))
+    .reverse();
 
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [toast, setToast] = useState(null);
@@ -28,10 +41,6 @@ export default function Expenses() {
 
   // Claim cancellation states
   const [confirmCancelId, setConfirmCancelId] = useState(null);
-
-  useEffect(() => {
-    localStorage.setItem('nsg_employee_expense_claims', JSON.stringify(claims));
-  }, [claims]);
 
   // Set the first item as default selected claim
   useEffect(() => {
@@ -52,18 +61,29 @@ export default function Expenses() {
   const handleSubmitClaim = (newClaimData) => {
     const newClaim = {
       id: `EXP-${Math.floor(100 + Math.random() * 900)}`,
-      date: newClaimData.date,
+      employee_id: 102,
+      claim_date: newClaimData.date || new Date().toISOString().split('T')[0],
+      date: newClaimData.date || new Date().toISOString().split('T')[0],
       category: newClaimData.category,
-      amount: newClaimData.amount,
+      amount: Number(newClaimData.amount),
       description: newClaimData.description,
-      receiptName: newClaimData.receiptName,
+      receipt_url: newClaimData.receiptName || 'receipt.pdf',
+      receiptName: newClaimData.receiptName || 'receipt.pdf',
+      tl_approval: 'pending',
       tlStatus: 'pending',
+      hr_approval: 'pending',
       hrStatus: 'pending',
+      status: 'pending',
       payrollStatus: 'pending'
     };
 
-    const updatedClaims = [newClaim, ...claims];
-    setClaims(updatedClaims);
+    if (db && onUpdateDb) {
+      onUpdateDb({
+        ...db,
+        expenseClaims: [...(db.expenseClaims || []), newClaim]
+      });
+    }
+
     setSelectedClaim(newClaim);
 
     // Trigger Success Toast
@@ -93,13 +113,16 @@ export default function Expenses() {
   const handleConfirmCancel = () => {
     if (!confirmCancelId) return;
 
-    const updatedClaims = claims.filter(c => c.id !== confirmCancelId);
-    setClaims(updatedClaims);
+    if (db && onUpdateDb) {
+      onUpdateDb({
+        ...db,
+        expenseClaims: (db.expenseClaims || []).filter(c => c.id !== confirmCancelId)
+      });
+    }
 
     // Clear selection or update selection
-    if (selectedClaim?.id === confirmCancelId) {
-      setSelectedClaim(updatedClaims.length > 0 ? updatedClaims[0] : null);
-    }
+    const updatedClaims = claims.filter(c => c.id !== confirmCancelId);
+    setSelectedClaim(updatedClaims.length > 0 ? updatedClaims[0] : null);
 
     setConfirmCancelId(null);
     setToast('Claim canceled successfully.');
@@ -107,30 +130,7 @@ export default function Expenses() {
   };
 
   const updateClaimWorkflow = (id, field, status) => {
-    const updated = claims.map(c => {
-      if (c.id === id) {
-        const updatedClaim = { ...c, [field]: status };
-
-        // Logical cascading rules for simulation
-        if (field === 'tlStatus' && status === 'denied') {
-          updatedClaim.hrStatus = 'pending';
-          updatedClaim.payrollStatus = 'pending';
-        }
-        if (field === 'hrStatus' && status === 'denied') {
-          updatedClaim.payrollStatus = 'pending';
-        }
-
-        return updatedClaim;
-      }
-      return c;
-    });
-
-    setClaims(updated);
-
-    const selected = updated.find(c => c.id === id);
-    if (selected) {
-      setSelectedClaim(selected);
-    }
+    // Left empty since workflow transitions are now fully live across portals!
   };
 
   const getCategoryLabel = (cat) => {
@@ -416,7 +416,7 @@ export default function Expenses() {
                     <th style={{ fontSize: '11px' }}>TL Review</th>
                     <th style={{ fontSize: '11px' }}>HR Audit</th>
                     <th style={{ fontSize: '11px' }}>Payout</th>
-                    <th style={{ fontSize: '11px' }}>Simulate Flow</th>
+                    <th style={{ fontSize: '11px' }}>Integration</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -492,100 +492,20 @@ export default function Expenses() {
                             {claim.payrollStatus === 'reimbursed' ? 'Paid' : claim.payrollStatus}
                           </span>
                         </td>
-
                         {/* Actions to simulate reviews */}
                         <td onClick={(e) => e.stopPropagation()}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            {/* TL Control */}
-                            {claim.tlStatus === 'pending' && (
-                              <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', width: '22px', color: 'var(--text-muted)' }}>TL:</span>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'tlStatus', 'approved')}
-                                  className="icon-action-btn check"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Approve TL"
-                                >
-                                  <Check size={10} />
-                                </button>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'tlStatus', 'denied')}
-                                  className="icon-action-btn cross"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Reject TL"
-                                >
-                                  <X size={10} />
-                                </button>
-                              </div>
-                            )}
-
-                            {/* HR Control */}
-                            {claim.tlStatus === 'approved' && claim.hrStatus === 'pending' && (
-                              <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', width: '22px', color: 'var(--text-muted)' }}>HR:</span>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'hrStatus', 'approved')}
-                                  className="icon-action-btn check"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Approve HR"
-                                >
-                                  <Check size={10} />
-                                </button>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'hrStatus', 'denied')}
-                                  className="icon-action-btn cross"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Reject HR"
-                                >
-                                  <X size={10} />
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Payroll Control */}
-                            {claim.hrStatus === 'approved' && claim.payrollStatus === 'pending' && (
-                              <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', width: '22px', color: 'var(--text-muted)' }}>Pay:</span>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'payrollStatus', 'reimbursed')}
-                                  className="icon-action-btn check"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Mark Reimbursed"
-                                >
-                                  <Check size={10} />
-                                </button>
-                                <button
-                                  onClick={() => updateClaimWorkflow(claim.id, 'payrollStatus', 'denied')}
-                                  className="icon-action-btn cross"
-                                  style={{ border: 'none', cursor: 'pointer', width: '20px', height: '20px', padding: 0 }}
-                                  title="Reject Payment"
-                                >
-                                  <X size={10} />
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Reset Control */}
-                            {(claim.tlStatus !== 'pending' || claim.hrStatus !== 'pending' || claim.payrollStatus !== 'pending') && (
-                              <button
-                                onClick={() => {
-                                  updateClaimWorkflow(claim.id, 'tlStatus', 'pending');
-                                  updateClaimWorkflow(claim.id, 'hrStatus', 'pending');
-                                  updateClaimWorkflow(claim.id, 'payrollStatus', 'pending');
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: '1px dashed var(--border-color)',
-                                  borderRadius: '4px',
-                                  fontSize: '9px',
-                                  padding: '2px 4px',
-                                  color: 'var(--text-muted)',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Reset
-                              </button>
-                            )}
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: 'var(--text-muted)',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'var(--bg-tertiary)'
+                            }}>
+                              Live Connected
+                            </span>
                           </div>
                         </td>
                       </tr>

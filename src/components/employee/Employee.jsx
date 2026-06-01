@@ -32,7 +32,7 @@ export default function Employee({ activeTab, db, onUpdateDb }) {
   }
 
   if (activeTab === 'expenses') {
-    return <Expenses />;
+    return <Expenses db={db} onUpdateDb={onUpdateDb} />;
   }
 
   if (activeTab === 'profile') {

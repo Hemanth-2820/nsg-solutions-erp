@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styles from './approvals.module.css';
 import { leaveRequests, timesheetReviews, wfhRequests, attendanceCorrections } from './mockData';
-import { AlertTriangle, MapPin, CheckCircle, Clock, FileText, Camera, GitCommit, Calendar } from 'lucide-react';
+import { AlertTriangle, MapPin, CheckCircle, Clock, FileText, Camera, GitCommit, Calendar, DollarSign } from 'lucide-react';
 
 const Approvals = ({ db, onUpdateDb }) => {
   const [activeTab, setActiveTab] = useState('leave');
@@ -26,6 +26,25 @@ const Approvals = ({ db, onUpdateDb }) => {
         overlapWarning: dbLeaveRequests.some(other => other.id !== r.id && other.employee_id === r.employee_id && (other.status === 'hr_approved' || other.status === 'tl_approved') && other.from_date <= r.to_date && other.to_date >= r.from_date)
           ? "This employee has another approved leave overlapping these dates!"
           : null
+      };
+    });
+
+  // Compute expenses list dynamically from database
+  const dbExpenseClaims = db?.expenseClaims || [];
+  const expenses = dbExpenseClaims
+    .filter(c => c.tl_approval === 'pending' || (c.tlStatus === 'pending' && c.tl_approval !== 'approved'))
+    .map(c => {
+      const emp = allEmployees.find(e => e.id === c.employee_id) || { name: 'Unknown Employee' };
+      return {
+        id: c.id,
+        employee: emp.name,
+        employee_id: c.employee_id,
+        category: c.category || 'Other',
+        amount: c.amount || 0,
+        date: c.claim_date || c.date || '',
+        description: c.description || '',
+        receiptName: c.receipt_url || c.receiptName || 'receipt.pdf',
+        status: c.tl_approval || 'pending'
       };
     });
 
@@ -55,6 +74,20 @@ const Approvals = ({ db, onUpdateDb }) => {
         });
         onUpdateDb({ ...db, leaveRequests: updatedRequests });
       }
+    } else if (activeTab === 'expense') {
+      if (db && onUpdateDb) {
+        const updatedClaims = db.expenseClaims.map(c => {
+          if (c.id === id) {
+            return {
+              ...c,
+              tl_approval: actionType === 'approve' ? 'approved' : 'denied',
+              tlStatus: actionType === 'approve' ? 'approved' : 'denied'
+            };
+          }
+          return c;
+        });
+        onUpdateDb({ ...db, expenseClaims: updatedClaims });
+      }
     } else if (activeTab === 'timesheet') {
       setTimesheets(prev => prev.filter(item => item.id !== id));
     } else if (activeTab === 'wfh') {
@@ -71,6 +104,9 @@ const Approvals = ({ db, onUpdateDb }) => {
   if (activeTab === 'leave') {
     currentList = leaves;
     selectedItem = leaves.find(l => l.id === selectedId);
+  } else if (activeTab === 'expense') {
+    currentList = expenses;
+    selectedItem = expenses.find(e => e.id === selectedId);
   } else if (activeTab === 'timesheet') {
     currentList = timesheets;
     selectedItem = timesheets.find(t => t.id === selectedId);
@@ -210,6 +246,40 @@ const Approvals = ({ db, onUpdateDb }) => {
     </>
   );
 
+  const renderExpenseDetails = (item) => (
+    <>
+      <div className={styles.detailHeader}>
+        <h2 style={{ fontSize: '20px', margin: '0 0 8px 0', color: '#0f172a' }}>{item.employee}</h2>
+        <span style={{ color: '#94a3b8', fontSize: '14px' }}>{item.category} • ₹{Number(item.amount).toLocaleString('en-IN')}</span>
+      </div>
+
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Claim Date</span>
+        <div className={styles.detailValue}>{item.date}</div>
+      </div>
+
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Description</span>
+        <div className={styles.detailValue}>{item.description || '—'}</div>
+      </div>
+
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Receipt</span>
+        <div className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <FileText size={14} color="#64748b" />
+          <span style={{ fontSize: '13px' }}>{item.receiptName}</span>
+        </div>
+      </div>
+
+      <div className={styles.detailSection}>
+        <span className={styles.detailLabel}>Amount</span>
+        <div className={styles.detailValue} style={{ fontSize: '22px', fontWeight: '800', color: '#10b981' }}>
+          ₹{Number(item.amount).toLocaleString('en-IN')}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className={styles.approvalsContainer}>
       
@@ -243,6 +313,13 @@ const Approvals = ({ db, onUpdateDb }) => {
           <CheckCircle size={16} /> Attendance Corrections
           {corrections.length > 0 && <span className={styles.badge}>{corrections.length}</span>}
         </button>
+        <button 
+          className={`${styles.tabBtn} ${activeTab === 'expense' ? styles.tabBtnActive : ''}`}
+          onClick={() => handleTabChange('expense')}
+        >
+          <DollarSign size={16} /> Expenses
+          {expenses.length > 0 && <span className={styles.badge}>{expenses.length}</span>}
+        </button>
       </div>
 
       {/* 2-PANE LAYOUT */}
@@ -271,6 +348,7 @@ const Approvals = ({ db, onUpdateDb }) => {
                   {activeTab === 'timesheet' && `${item.totalHours} hrs logged`}
                   {activeTab === 'wfh' && `${item.date}`}
                   {activeTab === 'corrections' && `${item.date}`}
+                  {activeTab === 'expense' && `₹${Number(item.amount).toLocaleString('en-IN')} — ${item.category}`}
                 </div>
                 
                 <div className={styles.itemActions}>
@@ -304,6 +382,7 @@ const Approvals = ({ db, onUpdateDb }) => {
               {activeTab === 'timesheet' && renderTimesheetDetails(selectedItem)}
               {activeTab === 'wfh' && renderWfhDetails(selectedItem)}
               {activeTab === 'corrections' && renderCorrectionDetails(selectedItem)}
+              {activeTab === 'expense' && renderExpenseDetails(selectedItem)}
               
               <div className={styles.bigActionRow}>
                 <button className={styles.btnApprove} onClick={() => handleAction(selectedId, 'approve')}>Approve Request</button>

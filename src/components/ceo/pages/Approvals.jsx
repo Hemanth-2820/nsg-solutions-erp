@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, XCircle, Search, Filter, MessageSquare, Clock, ArrowRight, User, AlertCircle, X, Check
 } from 'lucide-react';

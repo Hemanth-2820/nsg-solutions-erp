@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, FileText, Check, User } from 'lucide-react';
+import { Lock, FileText, Check, User, Receipt, X } from 'lucide-react';
 
 export function PayrollBuilderView({ db, onUpdateDb, userRole, queryParams, setQueryParams }) {
   const payrollStep = Number(queryParams?.get('payrollStep')) || 1;
@@ -216,6 +216,116 @@ export function PayrollBuilderView({ db, onUpdateDb, userRole, queryParams, setQ
           </div>
         </div>
       )}
+
+      {/* ── Expense Reimbursement Verification Panel ─────────────────────── */}
+      {(() => {
+        const tlApprovedExpenses = (db.expenseClaims || []).filter(
+          c => (c.tl_approval === 'approved' || c.tlStatus === 'approved') &&
+               c.hr_approval !== 'approved' && c.hr_approval !== 'rejected'
+        );
+
+        if (tlApprovedExpenses.length === 0) return null;
+
+        const handleVerifyExpense = (claimId) => {
+          const updated = (db.expenseClaims || []).map(c => {
+            if (c.id === claimId) {
+              return {
+                ...c,
+                hr_approval: 'approved',
+                hrStatus: 'approved',
+                status: 'reimbursed',
+                payrollStatus: 'reimbursed',
+                hr_approved_at: new Date().toISOString(),
+                hr_approved_by: 'Sarah Jenkins'
+              };
+            }
+            return c;
+          });
+          onUpdateDb({ ...db, expenseClaims: updated });
+        };
+
+        const handleRejectExpense = (claimId) => {
+          const updated = (db.expenseClaims || []).map(c => {
+            if (c.id === claimId) {
+              return {
+                ...c,
+                hr_approval: 'rejected',
+                hrStatus: 'rejected',
+                status: 'rejected',
+                payrollStatus: 'rejected',
+                hr_rejected_at: new Date().toISOString()
+              };
+            }
+            return c;
+          });
+          onUpdateDb({ ...db, expenseClaims: updated });
+        };
+
+        return (
+          <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid #10b981', padding: '20px' }}>
+            <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', color: 'var(--text-primary)' }}>
+              <Receipt size={18} color="#10b981" />
+              Expense Reimbursement — Awaiting HR Verification ({tlApprovedExpenses.length})
+            </h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Employee</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Category</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Date</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Description</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Amount</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tlApprovedExpenses.map(c => {
+                  const emp = (db.employees || []).find(e => e.id === c.employee_id);
+                  return (
+                    <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '14px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <User size={12} />
+                          </div>
+                          {emp ? emp.name : `Emp #${c.employee_id}`}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{c.category || '—'}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{c.claim_date || c.date || '—'}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)', maxWidth: '200px' }}>
+                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.description || '—'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <FileText size={10} /> {c.receipt_url || c.receiptName || 'receipt.pdf'}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#10b981' }}>
+                        ₹{Number(c.amount).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => handleVerifyExpense(c.id)}
+                            style={{ padding: '5px 10px', background: '#10B981', border: 'none', color: '#fff', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Check size={11} /> Verify & Reimburse
+                          </button>
+                          <button
+                            onClick={() => handleRejectExpense(c.id)}
+                            style={{ padding: '5px 10px', background: '#EF4444', border: 'none', color: '#fff', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <X size={11} /> Reject
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       {/* Stepper Timeline UI */}
       <div className="pipeline" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '20px', marginBottom: '24px' }}>
