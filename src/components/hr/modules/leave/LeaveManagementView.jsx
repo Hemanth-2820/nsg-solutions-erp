@@ -197,7 +197,12 @@ export function LeaveManagementView({ db, onUpdateDb }) {
                         <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{emp.name}</strong>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.designation}</div>
                       </div>
-                      <span className="badge-pill bg-pink" style={{ fontSize: '10px' }}>Type: {r.leave_type}</span>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span className="badge-pill" style={{ fontSize: '10.5px', padding: '3px 8px', borderRadius: '12px', fontWeight: 'bold', backgroundColor: 'rgba(236,72,153,0.1)', color: 'var(--accent-pink)' }}>Type: {r.leave_type}</span>
+                        <span className="badge-pill" style={{ fontSize: '10.5px', padding: '3px 8px', borderRadius: '12px', fontWeight: 'bold', backgroundColor: r.status === 'tl_approved' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: r.status === 'tl_approved' ? 'var(--accent-green)' : 'var(--accent-gold)' }}>
+                          {r.status === 'tl_approved' ? '✓ TL Approved' : '⏳ Pending TL Approval'}
+                        </span>
+                      </div>
                     </div>
 
                     <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '6px' }}>

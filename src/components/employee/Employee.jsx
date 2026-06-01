@@ -24,7 +24,7 @@ export default function Employee({ activeTab, db, onUpdateDb }) {
   }
 
   if (activeTab === 'leave') {
-    return <Leave />;
+    return <Leave db={db} onUpdateDb={onUpdateDb} />;
   }
 
   if (activeTab === 'payroll') {

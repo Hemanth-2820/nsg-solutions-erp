@@ -121,7 +121,7 @@ function OverlapWarning({ visible, members, dates }) {
 }
 
 // ─── ApplyLeaveForm ───────────────────────────────────────────────────────────
-function ApplyLeaveForm({ prefillType, onSuccess }) {
+function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb }) {
   const [leaveType, setLeaveType] = useState(prefillType || '');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -176,6 +176,29 @@ function ApplyLeaveForm({ prefillType, onSuccess }) {
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);
+
+      const typeAcronym = leaveType === 'Casual Leave' ? 'CL' : leaveType === 'Sick Leave' ? 'SL' : leaveType === 'Earned Leave' ? 'EL' : leaveType === 'Comp Off' ? 'CompOff' : 'Maternity';
+
+      const newLeaveRequest = {
+        id: Date.now(),
+        employee_id: 102, // Jane Smith
+        leave_type: typeAcronym,
+        from_date: fromDate,
+        to_date: toDate,
+        days: parseFloat(dayCount),
+        reason: reason || 'Planned leave.',
+        status: 'pending',
+        applied_date: new Date().toISOString().slice(0, 10),
+        tl_approved_at: null,
+        hr_approved_at: null
+      };
+
+      if (db && onUpdateDb) {
+        const currentRequests = Array.isArray(db.leaveRequests) ? db.leaveRequests : [];
+        const updatedRequests = [...currentRequests, newLeaveRequest];
+        onUpdateDb({ ...db, leaveRequests: updatedRequests });
+      }
+
       setTimeout(() => {
         setSuccess(false);
         setLeaveType(''); setFromDate(''); setToDate('');
@@ -331,12 +354,35 @@ function LeaveHistoryTable({ history, onCancelRequest }) {
 }
 
 // ─── EmpLeavePage (root) ──────────────────────────────────────────────────────
-export default function Leave() {
-  const [history, setHistory] = useState(LEAVE_HISTORY);
-  const [balances, setBalances] = useState(LEAVE_BALANCES);
+export default function Leave({ db, onUpdateDb }) {
   const [prefillType, setPrefillType] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   const formRef = useRef(null);
+
+  // Read Live balances of employee 102 (Jane Smith) from global DB
+  const myDbBalance = db?.leaveBalances?.find(b => b.employee_id === 102) || { CL: 12, SL: 8, EL: 15, Maternity: 0, Paternity: 0 };
+
+  const balances = [
+    { type: 'CL',      label: 'Casual Leave',       used: 12 - (myDbBalance.CL || 0),  total: 12, color: 'var(--cl-color)'      },
+    { type: 'SL',      label: 'Sick Leave',          used: 8 - (myDbBalance.SL || 0),   total: 8,  color: 'var(--sl-color)'      },
+    { type: 'EL',      label: 'Earned Leave',        used: 15 - (myDbBalance.EL || 0),  total: 15, color: 'var(--el-color)'      },
+    { type: 'Maternity', label: 'Maternity Leave', used: 26 - (myDbBalance.Maternity || 0), total: 26, color: 'var(--compoff-color)' },
+  ];
+
+  // Read Live request history of Jane Smith
+  const myHistory = (db?.leaveRequests || [])
+    .filter(r => r.employee_id === 102)
+    .map(r => ({
+      id: r.id,
+      applied: r.applied_date || r.from_date,
+      type: r.leave_type,
+      from: r.from_date,
+      to: r.to_date,
+      days: r.days,
+      status: r.status === 'hr_approved' ? 'Approved' : r.status === 'tl_approved' ? 'TL Approved' : r.status === 'denied' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : r.status.charAt(0).toUpperCase() + r.status.slice(1),
+      approver: r.status === 'hr_approved' ? 'HR Manager' : r.status === 'tl_approved' ? 'Sarah Jenkins' : '—'
+    }))
+    .reverse();
 
   function handleApply(type) {
     const match = balances.find(b => b.type === type);
@@ -345,12 +391,14 @@ export default function Leave() {
   }
 
   function handleSuccess() {
-    // In a real app, refetch balances & history
     setPrefillType('');
   }
 
   function handleCancelConfirm(id) {
-    setHistory(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r));
+    if (db && onUpdateDb) {
+      const updatedRequests = db.leaveRequests.map(r => r.id === id ? { ...r, status: 'cancelled' } : r);
+      onUpdateDb({ ...db, leaveRequests: updatedRequests });
+    }
     setCancelTarget(null);
   }
 
@@ -378,11 +426,13 @@ export default function Leave() {
       <div className="lv-bottom-grid">
         {/* Apply Form */}
         <div ref={formRef}>
-          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} />
+          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} db={db} onUpdateDb={onUpdateDb} />
         </div>
 
         {/* History Table */}
-        <LeaveHistoryTable history={history} onCancelRequest={setCancelTarget} />
+        <div className="lv-history-col">
+          <LeaveHistoryTable history={myHistory} onCancelRequest={setCancelTarget} />
+        </div>
       </div>
 
       {/* Cancel Modal */}

@@ -3,10 +3,32 @@ import styles from './approvals.module.css';
 import { leaveRequests, timesheetReviews, wfhRequests, attendanceCorrections } from './mockData';
 import { AlertTriangle, MapPin, CheckCircle, Clock, FileText, Camera, GitCommit, Calendar } from 'lucide-react';
 
-const Approvals = () => {
+const Approvals = ({ db, onUpdateDb }) => {
   const [activeTab, setActiveTab] = useState('leave');
   
-  const [leaves, setLeaves] = useState(leaveRequests);
+  // Compute leaves list dynamically from shared database
+  const allEmployees = db?.employees || [];
+  const dbLeaveRequests = db?.leaveRequests || [];
+
+  const leaves = dbLeaveRequests
+    .filter(r => r.status === 'pending')
+    .map(r => {
+      const emp = allEmployees.find(e => e.id === r.employee_id) || { name: 'Unknown Employee' };
+      return {
+        id: r.id,
+        employee: emp.name,
+        employee_id: r.employee_id,
+        type: r.leave_type === 'CL' ? 'Casual Leave' : r.leave_type === 'SL' ? 'Sick Leave' : r.leave_type === 'EL' ? 'Earned Leave' : r.leave_type === 'CompOff' ? 'Comp Off' : r.leave_type,
+        days: r.days,
+        dates: `${r.from_date} – ${r.to_date}`,
+        reason: r.reason,
+        status: r.status,
+        overlapWarning: dbLeaveRequests.some(other => other.id !== r.id && other.employee_id === r.employee_id && (other.status === 'hr_approved' || other.status === 'tl_approved') && other.from_date <= r.to_date && other.to_date >= r.from_date)
+          ? "This employee has another approved leave overlapping these dates!"
+          : null
+      };
+    });
+
   const [timesheets, setTimesheets] = useState(timesheetReviews);
   const [wfhs, setWfhs] = useState(wfhRequests);
   const [corrections, setCorrections] = useState(attendanceCorrections);
@@ -20,7 +42,19 @@ const Approvals = () => {
 
   const handleAction = (id, actionType) => {
     if (activeTab === 'leave') {
-      setLeaves(prev => prev.filter(item => item.id !== id));
+      if (db && onUpdateDb) {
+        const updatedRequests = db.leaveRequests.map(r => {
+          if (r.id === id) {
+            return {
+              ...r,
+              status: actionType === 'approve' ? 'tl_approved' : 'rejected',
+              tl_approved_at: actionType === 'approve' ? new Date().toISOString() : null
+            };
+          }
+          return r;
+        });
+        onUpdateDb({ ...db, leaveRequests: updatedRequests });
+      }
     } else if (activeTab === 'timesheet') {
       setTimesheets(prev => prev.filter(item => item.id !== id));
     } else if (activeTab === 'wfh') {
