@@ -10,10 +10,10 @@ export default function CeoSidebar({ activeTab, setActiveTab }) {
       <button
         className={`nav-link ${isActive ? 'active' : ''}`}
         onClick={() => setActiveTab('dashboard')}
-        style={isActive ? { 
+        style={isActive ? {
           color: '#f59e0b',
           borderLeftColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.05)' 
+          backgroundColor: 'rgba(245, 158, 11, 0.05)'
         } : {}}
       >
         <LayoutDashboard size={18} />
