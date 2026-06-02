@@ -383,18 +383,15 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb }) {
     e.preventDefault();
     if (!newChannelName.trim()) return;
     
-    const formattedName = newChannelName.startsWith('#') ? newChannelName.trim() : `#${newChannelName.trim()}`;
-    const newId = formattedName.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
-    
-    if (chatChannels.some(c => c.id === newId)) {
-      alert('A channel with this name already exists.');
-      return;
-    }
+    const rawName = newChannelName.trim().replace(/^#+/, '');
+    const formattedName = `#${rawName}`;
+    const baseId = rawName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'channel';
+    const newId = `${baseId}-${Date.now()}`;
     
     const newChan = {
       id: newId,
       name: formattedName,
-      label: `${newChannelName} Channel`,
+      label: `${rawName} Channel`,
       type: 'staff',
       members: ['101', '102', '103', '104', '105', 'hr', 'ceo'],
       messages: [
@@ -407,7 +404,8 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb }) {
       ]
     };
     
-    const updated = [...chatChannels, newChan];
+    const currentChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
+    const updated = [...currentChannels, newChan];
     onUpdateDb({ ...db, chatChannels: updated });
     
     setNewChannelName('');

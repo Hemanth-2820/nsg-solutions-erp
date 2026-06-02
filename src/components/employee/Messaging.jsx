@@ -637,7 +637,7 @@ export default function Messaging({ db, onUpdateDb }) {
 
             {/* Channels & Rooms List */}
             <div style={{ flex: 1, overflowY: 'auto' }} className="chat-sidebar-scroll">
-              {(db.chatChannels || []).filter(c => c.members.includes('102')).map(c => {
+              {chatChannels.filter(c => c.members && c.members.includes('102')).map(c => {
                 const isActive = activeRoomId === c.id;
                 const isGrievance = c.type === 'grievance';
                 return (

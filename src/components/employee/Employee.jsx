@@ -9,8 +9,19 @@ import Timesheet from './Timesheet';
 import Tasks from './Tasks';
 import Leave from './Leave';
 import Payroll from './Payroll';
+import EmployeeDashboard from './EmployeeDashboard';
 
-export default function Employee({ activeTab, db, onUpdateDb }) {
+export default function Employee({ activeTab, db, onUpdateDb, navigateTo }) {
+  // Helper: switch to an employee tab
+  const setActiveTab = (tab) => {
+    if (navigateTo) navigateTo('Employee', tab);
+    else window.location.hash = `#/Employee/${tab}`;
+  };
+
+  if (activeTab === 'dashboard') {
+    return <EmployeeDashboard db={db} onUpdateDb={onUpdateDb} setActiveTab={setActiveTab} />;
+  }
+
   if (activeTab === 'attendance') {
     return <Attendance db={db} onUpdateDb={onUpdateDb} />;
   }
@@ -55,21 +66,6 @@ export default function Employee({ activeTab, db, onUpdateDb }) {
     return <Messaging db={db} onUpdateDb={onUpdateDb} />;
   }
 
-  return (
-    <div className="component-container emp-root">
-      <div className="component-header">
-        <div>
-          <h1>Employee Dashboard</h1>
-          <p>Organize your day-to-day deliverables, submit your timecards, and review your benefits.</p>
-        </div>
-      </div>
-
-      <div className="tab-pane" style={{ padding: '60px 40px', textAlign: 'center', borderStyle: 'dashed', borderWidth: '2px' }}>
-        <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>Staff Workspace Ready</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '480px', margin: '0 auto' }}>
-          This is your clean Employee dashboard canvas. Developers can add task checklists, timecards, logging charts, and benefit summaries here.
-        </p>
-      </div>
-    </div>
-  );
-}
+  // Fallback: show dashboard
+  return <EmployeeDashboard db={db} onUpdateDb={onUpdateDb} setActiveTab={setActiveTab} />;
+}

@@ -270,21 +270,23 @@ export function HrMessagingView({ db, onUpdateDb }) {
   const handleCreateChannel = (e) => {
     e.preventDefault();
     if (!newChannelName.trim()) return;
-    
-    const formattedName = newChannelName.startsWith('#') ? newChannelName.trim() : `#${newChannelName.trim()}`;
-    const newId = formattedName.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
-    
-    if (chatChannels.some(c => c.id === newId)) {
-      alert('A channel with this name already exists.');
+    if (!onUpdateDb) {
+      alert('Database not ready. Please refresh the page.');
       return;
     }
+    
+    const rawName = newChannelName.trim().replace(/^#+/, '');
+    const formattedName = `#${rawName}`;
+    // Use timestamp suffix to guarantee uniqueness every time
+    const baseId = rawName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'channel';
+    const newId = `${baseId}-${Date.now()}`;
     
     const newChan = {
       id: newId,
       name: formattedName,
-      label: newChannelLabel.trim() || `${newChannelName} Channel`,
+      label: newChannelLabel.trim() || `${rawName} Channel`,
       type: newChannelType,
-      members: selectedRosterMembers,
+      members: selectedRosterMembers.length > 0 ? selectedRosterMembers : ['hr'],
       messages: [
         {
           id: Date.now(),
@@ -295,7 +297,8 @@ export function HrMessagingView({ db, onUpdateDb }) {
       ]
     };
     
-    const updated = [...chatChannels, newChan];
+    const currentChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
+    const updated = [...currentChannels, newChan];
     onUpdateDb({ ...db, chatChannels: updated });
     
     setNewChannelName('');

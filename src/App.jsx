@@ -372,7 +372,7 @@ export default function App() {
       case 'TL':
         return <Tl {...props} />;
       case 'Employee':
-        return <Employee {...props} />;
+        return <Employee {...props} navigateTo={navigateTo} />;
       default:
         return <Ceo {...props} />;
     }
