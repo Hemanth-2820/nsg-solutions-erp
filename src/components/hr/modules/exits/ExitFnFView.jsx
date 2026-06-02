@@ -8,11 +8,6 @@ export function ExitFnFView({ db, onUpdateDb }) {
   const [hrSign, setHrSign] = useState('');
   const [isCalibrateOpen, setIsCalibrateOpen] = useState(false);
 
-  // Asset return checkboxes states (strict verification gates)
-  const [assetLaptop, setAssetLaptop] = useState(false);
-  const [assetToken, setAssetToken] = useState(false);
-  const [assetPhone, setAssetPhone] = useState(false);
-
   // FnF computation states
   const [earnedSalary, setEarnedSalary] = useState(35000);
   const [reimbursements, setReimbursements] = useState(5000);
@@ -21,6 +16,62 @@ export function ExitFnFView({ db, onUpdateDb }) {
 
   const activeResignation = db.resignations?.find(r => r.id === selectedResignId) || { id: 1, employee_id: 103, status: 'pending', reason: 'Higher studies.' };
   const exitingEmp = db.employees.find(e => e.id === activeResignation.employee_id) || { name: 'Staff', bank_name: 'HDFC', account_number: '0000', email: 'staff@nsg.com' };
+
+  // Derive live asset return verification states from the central database
+  const employeeAssets = db.assets?.filter(a => a.employee_id === exitingEmp.id) || [];
+  const assetLaptop = employeeAssets.find(a => a.type === 'Laptop')?.returnStatus === 'Signed';
+  const assetToken = employeeAssets.find(a => a.type === 'Access Card')?.returnStatus === 'Signed';
+  const assetPhone = employeeAssets.find(a => a.type === 'Headset')?.returnStatus === 'Signed';
+
+  const toggleAssetStatus = (type) => {
+    const asset = employeeAssets.find(a => a.type === type);
+    if (!asset) return;
+    
+    const newStatus = asset.returnStatus === 'Signed' ? 'Pending NOC' : 'Signed';
+    const today = newStatus === 'Signed' ? new Date().toLocaleDateString() : null;
+
+    const updatedAssets = (db.assets || []).map(a => {
+      if (a.employee_id === exitingEmp.id && a.type === type) {
+        return { ...a, returnStatus: newStatus, signedDate: today };
+      }
+      return a;
+    });
+
+    // Sync exit checklist in the resignation record
+    let updatedResignations = db.resignations || [];
+    const userResignation = updatedResignations.find(r => r.employee_id === exitingEmp.id);
+    if (userResignation) {
+      const checklist = userResignation.checklist || [
+        { id: 'handover', label: 'Handover tasks', completed: false },
+        { id: 'laptop', label: 'Laptop return', completed: false },
+        { id: 'access_card', label: 'Access card return', completed: false },
+        { id: 'kt_upload', label: 'KT document upload', completed: false, fileName: null }
+      ];
+
+      const updatedChecklist = checklist.map((task) => {
+        if (type === 'Laptop' && task.id === 'laptop') {
+          return { ...task, completed: newStatus === 'Signed' };
+        }
+        if (type === 'Access Card' && task.id === 'access_card') {
+          return { ...task, completed: newStatus === 'Signed' };
+        }
+        return task;
+      });
+
+      updatedResignations = updatedResignations.map(r => {
+        if (r.employee_id === exitingEmp.id) {
+          return { ...r, checklist: updatedChecklist };
+        }
+        return r;
+      });
+    }
+
+    onUpdateDb({
+      ...db,
+      assets: updatedAssets,
+      resignations: updatedResignations
+    });
+  };
 
   // Sync loan deduction dynamically from active payroll loans
   const activeLoan = db.loans?.find(l => l.employee_id === exitingEmp.id && l.status === 'active');
@@ -268,7 +319,7 @@ export function ExitFnFView({ db, onUpdateDb }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={assetLaptop} onChange={(e) => setAssetLaptop(e.target.checked)} style={{ width: '20px', height: '20px' }} />
+                <input type="checkbox" checked={assetLaptop} onChange={() => toggleAssetStatus('Laptop')} style={{ width: '20px', height: '20px' }} />
                 <div>
                   <strong>Corporate MacBook Pro Silicon</strong>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>SN: NSG-MAC-093 | Verified physical casing clean</div>
@@ -276,7 +327,7 @@ export function ExitFnFView({ db, onUpdateDb }) {
               </label>
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={assetToken} onChange={(e) => setAssetToken(e.target.checked)} style={{ width: '20px', height: '20px' }} />
+                <input type="checkbox" checked={assetToken} onChange={() => toggleAssetStatus('Access Card')} style={{ width: '20px', height: '20px' }} />
                 <div>
                   <strong>RSA Security Hardware OTP Token</strong>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>ID: RSA-8472-F | Revoked MFA connections</div>
@@ -284,7 +335,7 @@ export function ExitFnFView({ db, onUpdateDb }) {
               </label>
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={assetPhone} onChange={(e) => setAssetPhone(e.target.checked)} style={{ width: '20px', height: '20px' }} />
+                <input type="checkbox" checked={assetPhone} onChange={() => toggleAssetStatus('Headset')} style={{ width: '20px', height: '20px' }} />
                 <div>
                   <strong>Corporate Mobile (iPhone SE)</strong>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>SN: NSG-PHN-201 | Sim-card retrieved and archived</div>

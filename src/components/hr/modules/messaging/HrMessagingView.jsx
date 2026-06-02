@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Video, MessageSquare, Lock, Eye, MoreVertical, Edit2, Trash2, Reply, Forward, Bookmark, X, Check } from 'lucide-react';
 
-export function HrMessagingView({ db }) {
+export function HrMessagingView({ db, onUpdateDb }) {
   const [selectedChannel, setSelectedChannel]     = useState('hr-channel');
   const [newMsg, setNewMsg]                       = useState('');
   const [isPrivate, setIsPrivate]                 = useState(false);
@@ -30,9 +30,12 @@ export function HrMessagingView({ db }) {
       { id: 'digital-marketing-channel', name: '#digital-marketing-channel', label: 'Digital Marketing'  },
       { id: 'hr-channel',                name: '#hr-channel',                label: 'HR Dept Room'      },
       { id: 'ba-channel',                name: '#ba-channel',                label: 'Business Analysis'  }
+    ],
+    support: [
+      { id: 'support-tickets', name: '🎫 Support Tickets', label: 'Employee IT/HR Tickets' }
     ]
   };
-  const allChannels = [...channels.management, ...channels.staff];
+  const allChannels = [...channels.management, ...channels.staff, ...channels.support];
 
   // ── Seed message history ─────────────────────────────────────────────────────
   const [channelMessages, setChannelMessages] = useState({
@@ -245,6 +248,24 @@ export function HrMessagingView({ db }) {
               ))}
             </div>
           </div>
+          {/* Support Tickets Channel */}
+          <div>
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🎫 Support Queue</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div onClick={() => setSelectedChannel('support-tickets')}
+                style={{ padding: '9px 12px', backgroundColor: selectedChannel === 'support-tickets' ? 'rgba(236,72,153,0.08)' : 'transparent', color: selectedChannel === 'support-tickets' ? 'var(--accent-pink)' : 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: selectedChannel === 'support-tickets' ? '600' : 'normal', border: selectedChannel === 'support-tickets' ? '1px solid rgba(236,72,153,0.2)' : '1px solid transparent', transition: 'all 0.15s', justifyContent: 'space-between' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MessageSquare size={13} style={{ color: selectedChannel === 'support-tickets' ? 'var(--accent-pink)' : 'var(--text-muted)', flexShrink: 0 }} />
+                  🎫 Support Tickets
+                </span>
+                {(db.supportTickets || []).filter(t => t.status === 'Open').length > 0 && (
+                  <span style={{ fontSize: '9px', fontWeight: '700', backgroundColor: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 6px' }}>
+                    {(db.supportTickets || []).filter(t => t.status === 'Open').length}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto' }}>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🎥 Quick Actions</span>
             <div style={{ padding: '10px 12px', background: 'rgba(236,72,153,0.05)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--accent-pink)', border: '1px dashed rgba(236,72,153,0.3)' }} onClick={() => alert('Creating secure WebRTC video room...')}>
@@ -253,10 +274,70 @@ export function HrMessagingView({ db }) {
           </div>
         </div>
 
-        {/* ── Right: Chat window ──────────────────────────────────────────────── */}
+        {/* ── Right: Chat window OR Support Tickets panel ─────────────────────── */}
         <div className="card flex-2" style={{ margin: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', gap: 0 }}>
 
-          {/* Header */}
+          {/* Support Tickets Panel */}
+          {selectedChannel === 'support-tickets' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                <strong style={{ fontSize: '15px' }}>🎫 Employee Support Tickets</strong>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                  {(db.supportTickets || []).filter(t => t.status === 'Open').length} open
+                </span>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {(db.supportTickets || []).length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
+                    No support tickets yet. Employee submissions will appear here.
+                  </div>
+                ) : (
+                  (db.supportTickets || []).map((tkt) => (
+                    <div key={tkt.id} style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '700', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{tkt.id}</span>
+                          <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
+                            color: tkt.priority === 'High' ? '#ef4444' : tkt.priority === 'Medium' ? '#f59e0b' : 'var(--text-muted)' }}>
+                            {tkt.priority}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{tkt.issueType}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '4px',
+                            backgroundColor: tkt.status === 'Open' ? 'rgba(59,130,246,0.1)' : 'rgba(16,185,129,0.1)',
+                            color: tkt.status === 'Open' ? '#3b82f6' : '#10b981' }}>
+                            {tkt.status}
+                          </span>
+                          {tkt.status === 'Open' && onUpdateDb && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = (db.supportTickets || []).map(t =>
+                                  t.id === tkt.id ? { ...t, status: 'Resolved', resolvedAt: new Date().toLocaleDateString(), resolvedBy: 'HR' } : t
+                                );
+                                onUpdateDb({ ...db, supportTickets: updated });
+                              }}
+                              style={{ fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '4px', border: 'none', backgroundColor: 'var(--accent-pink)', color: '#fff', cursor: 'pointer' }}
+                            >
+                              ✓ Mark Resolved
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{tkt.description}</p>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '12px' }}>
+                        <span>From: <strong>{tkt.employee_name || 'Employee'}</strong></span>
+                        <span>Logged: {tkt.createdAt}</span>
+                        {tkt.resolvedAt && <span>Resolved: {tkt.resolvedAt} by {tkt.resolvedBy}</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <strong style={{ fontSize: '15px' }}>{allChannels.find(c => c.id === selectedChannel)?.name}</strong>
@@ -426,6 +507,8 @@ export function HrMessagingView({ db }) {
               </button>
             </form>
           </div>
+            </>
+          )}
         </div>
       </div>
 

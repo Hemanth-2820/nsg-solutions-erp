@@ -39,6 +39,16 @@ const INITIAL_RESIGNATIONS = [
   }
 ];
 
+const INITIAL_ASSETS = [
+  { id: 'LAP-089', employee_id: 102, assetTag: 'NSG-LAP-089', type: 'Laptop', name: 'Corporate MacBook Pro Silicon', serialNumber: 'SN-89736412', issueDate: '2024-03-15', condition: 'Excellent', returnStatus: 'Pending NOC', signedDate: null },
+  { id: 'ACC-512', employee_id: 102, assetTag: 'NSG-ACC-512', type: 'Access Card', name: 'RSA Security Hardware OTP Token', serialNumber: 'SN-00512', issueDate: '2024-03-15', condition: 'Good', returnStatus: 'Pending NOC', signedDate: null },
+  { id: 'HDS-990', employee_id: 102, assetTag: 'NSG-HDS-990', type: 'Headset', name: 'Corporate Mobile (iPhone SE)', serialNumber: 'SN-990812', issueDate: '2025-01-10', condition: 'Fair', returnStatus: 'Pending NOC', signedDate: null },
+  
+  { id: 'LAP-093', employee_id: 103, assetTag: 'NSG-MAC-093', type: 'Laptop', name: 'Corporate MacBook Pro Silicon', serialNumber: 'SN-93746123', issueDate: '2023-11-01', condition: 'Excellent', returnStatus: 'Pending NOC', signedDate: null },
+  { id: 'RSA-847', employee_id: 103, assetTag: 'RSA-8472-F', type: 'Access Card', name: 'RSA Security Hardware OTP Token', serialNumber: 'SN-84720', issueDate: '2023-11-01', condition: 'Good', returnStatus: 'Pending NOC', signedDate: null },
+  { id: 'PHN-201', employee_id: 103, assetTag: 'NSG-PHN-201', type: 'Headset', name: 'Corporate Mobile (iPhone SE)', serialNumber: 'SN-201948', issueDate: '2024-05-10', condition: 'Good', returnStatus: 'Pending NOC', signedDate: null }
+];
+
 const INITIAL_TIMESHEETS = [
   {
     id: 1,
@@ -53,6 +63,29 @@ const INITIAL_TIMESHEETS = [
     ]
   }
 ];
+
+const INITIAL_EMPLOYEE_CHAT_ROOMS = {
+  'team-room': {
+    id: 'team-room',
+    name: 'Team Chat Room',
+    type: 'team',
+    desc: 'General engineering sprint updates, PR reviews, and deploy logs.',
+    messages: [
+      { id: 1, sender: 'Marcus Vance', text: 'Hey team, morning! Please drop your standup items here. Also, let\'s aim to deploy the new build by 4 PM.', time: '9:15 AM', isMe: false },
+      { id: 2, sender: 'Alex Wong', text: 'Morning! Working on the payment gate validation fixes. PR is ready for review: #412.', time: '9:30 AM', isMe: false },
+      { id: 3, sender: 'Sarah Jenkins', text: 'Morning! I\'m wrapping up the Asset Requests validation and mobile tab changes. I\'ll review your PR, Alex, right after.', time: '9:35 AM', isMe: true }
+    ]
+  },
+  'grievance-room': {
+    id: 'grievance-room',
+    name: 'HR Grievance (Private)',
+    type: 'grievance',
+    desc: 'Confidential private channel with HR department.',
+    messages: [
+      { id: 1, sender: 'Sophia Reed (HR Officer)', text: 'Hello Sarah, welcome to your secure grievance portal. Anything shared here remains private. How can I assist you today?', time: 'Yesterday', isMe: false }
+    ]
+  }
+};
 
 const INITIAL_TASKS = [
   {
@@ -181,6 +214,10 @@ export default function App() {
         if (!parsed.resignations) parsed.resignations = INITIAL_RESIGNATIONS;
         if (!parsed.timesheets) parsed.timesheets = INITIAL_TIMESHEETS;
         if (!parsed.tasks || !Array.isArray(parsed.tasks)) parsed.tasks = INITIAL_TASKS;
+        if (!parsed.supportTickets) parsed.supportTickets = [];
+        if (!parsed.assets) parsed.assets = INITIAL_ASSETS;
+        if (!parsed.assetRequests) parsed.assetRequests = [];
+        if (!parsed.employeeChatRooms) parsed.employeeChatRooms = INITIAL_EMPLOYEE_CHAT_ROOMS;
         
         // Remove pre-seeded mock logs & corrections for active testing employee ID 102
         // This ensures a completely blank sheet so only your live actions show up!
@@ -220,7 +257,11 @@ export default function App() {
       attendanceCorrections: [],
       resignations: INITIAL_RESIGNATIONS,
       timesheets: INITIAL_TIMESHEETS,
-      tasks: INITIAL_TASKS
+      tasks: INITIAL_TASKS,
+      supportTickets: [],
+      assets: INITIAL_ASSETS,
+      assetRequests: [],
+      employeeChatRooms: INITIAL_EMPLOYEE_CHAT_ROOMS
     };
     localStorage.setItem('nsg_hr_db', JSON.stringify(seed));
     return seed;

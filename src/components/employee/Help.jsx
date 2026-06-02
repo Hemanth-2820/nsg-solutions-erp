@@ -4,20 +4,35 @@ import GrievanceChat from './GrievanceChat';
 import FaqBase from './FaqBase';
 import { ShieldCheck, Ticket } from 'lucide-react';
 
-export default function Help() {
-  const [tickets, setTickets] = useState(() => {
+const EMPLOYEE_ID = 102;
+
+export default function Help({ db, onUpdateDb }) {
+  // Read existing tickets from shared db, filtered for this employee
+  const getInitialTickets = () => {
+    if (db?.supportTickets) {
+      return db.supportTickets.filter(t => t.employee_id === EMPLOYEE_ID);
+    }
     const saved = localStorage.getItem('nsg_employee_support_tickets');
     return saved ? JSON.parse(saved) : [];
-  });
+  };
+
+  const [tickets, setTickets] = useState(getInitialTickets);
 
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    localStorage.setItem('nsg_employee_support_tickets', JSON.stringify(tickets));
-  }, [tickets]);
-
   const handleSubmitTicket = (newTicket) => {
-    setTickets((prev) => [newTicket, ...prev]);
+    const ticketWithMeta = { ...newTicket, employee_id: EMPLOYEE_ID, employee_name: 'Jane Smith' };
+
+    // Write to shared db.supportTickets so HR Messaging can see it
+    if (db && onUpdateDb) {
+      const updatedTickets = [ticketWithMeta, ...(db.supportTickets || [])];
+      onUpdateDb({ ...db, supportTickets: updatedTickets });
+      setTickets(updatedTickets.filter(t => t.employee_id === EMPLOYEE_ID));
+    } else {
+      setTickets((prev) => [ticketWithMeta, ...prev]);
+      localStorage.setItem('nsg_employee_support_tickets', JSON.stringify([ticketWithMeta, ...tickets]));
+    }
+
     showToast('Support ticket logged successfully.');
   };
 

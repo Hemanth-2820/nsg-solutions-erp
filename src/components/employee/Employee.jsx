@@ -44,15 +44,15 @@ export default function Employee({ activeTab, db, onUpdateDb }) {
   }
 
   if (activeTab === 'help') {
-    return <Help />;
+    return <Help db={db} onUpdateDb={onUpdateDb} />;
   }
 
   if (activeTab === 'assets') {
-    return <Assets />;
+    return <Assets db={db} onUpdateDb={onUpdateDb} />;
   }
 
   if (activeTab === 'messaging') {
-    return <Messaging />;
+    return <Messaging db={db} onUpdateDb={onUpdateDb} />;
   }
 
   return (

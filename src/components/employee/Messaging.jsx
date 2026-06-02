@@ -43,8 +43,11 @@ const initialRoomData = {
   }
 };
 
-export default function Messaging() {
-  const [rooms, setRooms] = useState(() => {
+export default function Messaging({ db, onUpdateDb }) {
+  const getInitialRooms = () => {
+    if (db?.employeeChatRooms) {
+      return db.employeeChatRooms;
+    }
     const saved = localStorage.getItem('nsg_employee_chat_rooms');
     if (saved) {
       try {
@@ -58,7 +61,16 @@ export default function Messaging() {
       }
     }
     return initialRoomData;
-  });
+  };
+
+  const [rooms, setRooms] = useState(getInitialRooms);
+
+  // Keep state synchronized with global database updates
+  useEffect(() => {
+    if (db?.employeeChatRooms) {
+      setRooms(db.employeeChatRooms);
+    }
+  }, [db]);
 
   const [activeRoomId, setActiveRoomId] = useState('team-room');
   const [inputText, setInputText] = useState('');
@@ -172,7 +184,12 @@ export default function Messaging() {
       }
     };
     
-    setRooms(newRooms);
+    if (db && onUpdateDb) {
+      onUpdateDb({ ...db, employeeChatRooms: newRooms });
+    } else {
+      setRooms(newRooms);
+      localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(newRooms));
+    }
     const sentText = inputText;
     setInputText('');
     setAttachedFiles([]);
@@ -198,8 +215,8 @@ export default function Messaging() {
         replyText = `Thanks for the update Sarah! Looks good, let's sync up later.`;
       } else if (activeRoom.type === 'dm') {
         const currentContact = teammates.find((c) => c.id === activeRoomId);
-        senderName = currentContact?.name || 'Teammate';
-        replyText = `Hey Sarah! Yes, I got your message. I'm slightly tied up but let's huddle in a bit if you are free.`;
+        senderName = currentContact ? currentContact.name : 'Teammate';
+        replyText = `Hey Sarah! Got your message. Let me review and get back to you soon.`;
       }
 
       const botMessage = {
@@ -210,14 +227,24 @@ export default function Messaging() {
         isMe: false
       };
 
-      setRooms((prev) => ({
-        ...prev,
+      // Read rooms again to prevent stale closure references
+      const currentRooms = db?.employeeChatRooms || newRooms;
+      const latestRoom = currentRooms[activeRoomId] || activeRoom;
+      const finalRooms = {
+        ...currentRooms,
         [activeRoomId]: {
-          ...prev[activeRoomId],
-          messages: [...(prev[activeRoomId]?.messages || []), botMessage]
+          ...latestRoom,
+          messages: [...(latestRoom.messages || []), botMessage]
         }
-      }));
-    }, 1500);
+      };
+
+      if (db && onUpdateDb) {
+        onUpdateDb({ ...db, employeeChatRooms: finalRooms });
+      } else {
+        setRooms(finalRooms);
+        localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(finalRooms));
+      }
+    }, 1200);
   };
 
   // Emojis list

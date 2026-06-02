@@ -34,10 +34,14 @@ export default function Resignation({ db, onUpdateDb }) {
 
   const [resignationData, setResignationData] = useState(getInitialData);
 
-  const [checklist, setChecklist] = useState(() => {
+  const getInitialChecklist = () => {
+    const dbRecord = getDbRecord();
+    if (dbRecord?.checklist) return dbRecord.checklist;
     const saved = localStorage.getItem('nsg_employee_resignation_checklist');
     return saved ? JSON.parse(saved) : defaultChecklist;
-  });
+  };
+
+  const [checklist, setChecklist] = useState(getInitialChecklist);
 
   // Read early relief status from db.resignations live
   const getEarlyReliefStatus = () => {
@@ -50,6 +54,17 @@ export default function Resignation({ db, onUpdateDb }) {
 
   const [toast, setToast] = useState(null);
 
+  // Sync state with database updates
+  useEffect(() => {
+    const dbRecord = getDbRecord();
+    if (dbRecord?.checklist) {
+      setChecklist(dbRecord.checklist);
+    }
+    if (dbRecord?.earlyRelief) {
+      setEarlyReliefStatus(dbRecord.earlyRelief);
+    }
+  }, [db]);
+
   // --- LocalStorage Sync ---
   useEffect(() => {
     if (resignationData) {
@@ -58,10 +73,6 @@ export default function Resignation({ db, onUpdateDb }) {
       localStorage.removeItem('nsg_employee_resignation_data');
     }
   }, [resignationData]);
-
-  useEffect(() => {
-    localStorage.setItem('nsg_employee_resignation_checklist', JSON.stringify(checklist));
-  }, [checklist]);
 
   useEffect(() => {
     if (earlyReliefStatus) {
@@ -90,7 +101,8 @@ export default function Resignation({ db, onUpdateDb }) {
         reason: data.reason || '',
         daysServed: 8,
         earlyRelief: null,
-        submitted_at: new Date().toISOString()
+        submitted_at: new Date().toISOString(),
+        checklist: checklist
       };
       // Remove any existing record for this employee first
       const filtered = (db.resignations || []).filter(r => r.employee_id !== EMPLOYEE_ID);
@@ -113,7 +125,16 @@ export default function Resignation({ db, onUpdateDb }) {
       }
       return t;
     });
-    setChecklist(updated);
+
+    if (db && onUpdateDb) {
+      const updatedResigns = (db.resignations || []).map(r =>
+        r.employee_id === EMPLOYEE_ID ? { ...r, checklist: updated } : r
+      );
+      onUpdateDb({ ...db, resignations: updatedResigns });
+    } else {
+      setChecklist(updated);
+      localStorage.setItem('nsg_employee_resignation_checklist', JSON.stringify(updated));
+    }
     showToast('Checklist task updated.');
   };
 
@@ -128,7 +149,16 @@ export default function Resignation({ db, onUpdateDb }) {
       }
       return t;
     });
-    setChecklist(updated);
+
+    if (db && onUpdateDb) {
+      const updatedResigns = (db.resignations || []).map(r =>
+        r.employee_id === EMPLOYEE_ID ? { ...r, checklist: updated } : r
+      );
+      onUpdateDb({ ...db, resignations: updatedResigns });
+    } else {
+      setChecklist(updated);
+      localStorage.setItem('nsg_employee_resignation_checklist', JSON.stringify(updated));
+    }
     showToast('KT document uploaded successfully.');
   };
 
