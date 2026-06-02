@@ -68,7 +68,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb }) {
   
   // === MOCK DATA ===
   const chatChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
-  const myChannels = chatChannels.filter(c => c.members.includes('ceo'));
+  const myChannels = chatChannels.filter(c => c.members && c.members.includes('ceo'));
 
   const [selectedChannel, setSelectedChannel] = useState(() => {
     if (initialSelectedChannel) return initialSelectedChannel;

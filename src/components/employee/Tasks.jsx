@@ -343,7 +343,7 @@ export default function Tasks({ db, onUpdateDb }) {
 
   const tasksList = db?.tasks || MOCK_TASKS;
   // View ONLY tasks assigned to Jane Smith in Employee ESS
-  const tasks = tasksList.filter(t => t.assignee === 'Jane Smith');
+  const tasks = tasksList.filter(t => !t.assignee || t.assignee === 'Jane Smith');
 
   const selectedTask = tasks.find(t => t.id === selectedId) || null;
 

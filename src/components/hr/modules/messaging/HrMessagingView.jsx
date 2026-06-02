@@ -109,7 +109,7 @@ export function HrMessagingView({ db, onUpdateDb }) {
   // ── Channel members (Derived dynamically from DB) ─────────────────────────────
   const getChannelMembers = (channelId) => {
     const ch = chatChannels.find(c => c.id === channelId);
-    if (!ch) return [];
+    if (!ch || !ch.members) return [];
     return ch.members.map(memberId => {
       if (memberId === 'hr') {
         return { id: 'hr', name: 'Sarah Jenkins', role: 'HR Manager' };
@@ -311,12 +311,12 @@ export function HrMessagingView({ db, onUpdateDb }) {
 
   const handleToggleMember = (memberId) => {
     if (!currentChannel) return;
-    
+    const membersList = currentChannel.members || [];
     let updatedMembers;
-    if (currentChannel.members.includes(memberId)) {
-      updatedMembers = currentChannel.members.filter(id => id !== memberId);
+    if (membersList.includes(memberId)) {
+      updatedMembers = membersList.filter(id => id !== memberId);
     } else {
-      updatedMembers = [...currentChannel.members, memberId];
+      updatedMembers = [...membersList, memberId];
     }
     
     const updatedChannels = chatChannels.map(c => {
@@ -953,7 +953,7 @@ export function HrMessagingView({ db, onUpdateDb }) {
               {/* Employees */}
               {(db.employees || []).map(emp => {
                 const idStr = String(emp.id);
-                const isMember = currentChannel.members.includes(idStr);
+                const isMember = currentChannel?.members && currentChannel.members.includes(idStr);
                 return (
                   <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div>

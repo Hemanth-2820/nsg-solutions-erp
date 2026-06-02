@@ -60,7 +60,7 @@ const DEFAULT_CHAT_CHANNELS = [
 
 const Messages = ({ initialSelectedChannel, db, onUpdateDb }) => {
   const chatChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
-  const myChannels = chatChannels.filter(c => c.members.includes('101'));
+  const myChannels = chatChannels.filter(c => c.members && c.members.includes('101'));
 
   // Selected channel state
   const [selectedChannel, setSelectedChannel] = useState(() => {
