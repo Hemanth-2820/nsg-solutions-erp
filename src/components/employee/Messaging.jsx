@@ -51,16 +51,12 @@ export default function Messaging({ db, onUpdateDb }) {
     const saved = localStorage.getItem('nsg_employee_chat_rooms');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        return {
-          ...initialRoomData,
-          ...parsed
-        };
+        return JSON.parse(saved);
       } catch (e) {
-        return initialRoomData;
+        return {};
       }
     }
-    return initialRoomData;
+    return {};
   };
 
   const [rooms, setRooms] = useState(getInitialRooms);
@@ -116,35 +112,43 @@ export default function Messaging({ db, onUpdateDb }) {
     localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(rooms));
   }, [rooms]);
 
-  const activeRoom = rooms[activeRoomId] || (
-    activeRoomId === 'team-room'
-      ? initialRoomData['team-room']
-      : activeRoomId === 'grievance-room'
-        ? initialRoomData['grievance-room']
-        : {
-            id: activeRoomId,
-            name: teammates.find((c) => c.id === activeRoomId)?.name || 'Direct Message',
-            type: 'dm',
-            desc: `Direct chat with ${teammates.find((c) => c.id === activeRoomId)?.role || 'Teammate'}`,
-            messages: []
-          }
+  const chatChannels = db?.chatChannels || [];
+
+  const activeRoom = chatChannels.find(c => c.id === activeRoomId) || rooms[activeRoomId] || (
+    activeRoomId.startsWith('c') ? {
+      id: activeRoomId,
+      name: teammates.find((c) => c.id === activeRoomId)?.name || 'Teammate',
+      type: 'dm',
+      desc: `Direct chat with ${teammates.find((c) => c.id === activeRoomId)?.role || 'Teammate'}`,
+      messages: []
+    } : {
+      id: activeRoomId,
+      name: 'Corporate Channel',
+      type: 'staff',
+      messages: []
+    }
   );
 
   // Start direct message
   const handleSelectDM = (contactId) => {
     if (!rooms[contactId]) {
       // Create a new DM room empty state
-      setRooms((prev) => ({
-        ...prev,
-        [contactId]: {
-          id: contactId,
-          name: teammates.find((c) => c.id === contactId)?.name || 'Teammate',
-          type: 'dm',
-          messages: [
-            { id: 999, sender: teammates.find((c) => c.id === contactId)?.name, text: 'Hey there! How can I help you today?', time: 'Just Now', isMe: false }
-          ]
-        }
-      }));
+      const newDMRoom = {
+        id: contactId,
+        name: teammates.find((c) => c.id === contactId)?.name || 'Teammate',
+        type: 'dm',
+        messages: [
+          { id: 999, sender: teammates.find((c) => c.id === contactId)?.name, text: 'Hey there! How can I help you today?', time: 'Just Now', isMe: false }
+        ]
+      };
+      const newRooms = {
+        ...rooms,
+        [contactId]: newDMRoom
+      };
+      setRooms(newRooms);
+      if (db && onUpdateDb) {
+        onUpdateDb({ ...db, employeeChatRooms: newRooms });
+      }
     }
     setActiveRoomId(contactId);
     if (isMobile) {
@@ -167,28 +171,42 @@ export default function Messaging({ db, onUpdateDb }) {
 
     const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMessage = {
-      id: msgIdCounter++,
-      sender: 'Sarah Jenkins',
+      id: Date.now(),
+      sender: 'Jane Smith',
       text: inputText.trim(),
       time: timeString,
       isMe: true,
       files: attachedFiles
     };
 
-    const updatedMessages = [...(activeRoom.messages || []), userMessage];
-    const newRooms = {
-      ...rooms,
-      [activeRoomId]: {
-        ...activeRoom,
-        messages: updatedMessages
-      }
-    };
-    
-    if (db && onUpdateDb) {
-      onUpdateDb({ ...db, employeeChatRooms: newRooms });
+    const isCorporateChannel = chatChannels.some(c => c.id === activeRoomId);
+
+    if (isCorporateChannel) {
+      const updatedChannels = chatChannels.map(c => {
+        if (c.id === activeRoomId) {
+          return {
+            ...c,
+            messages: [...(c.messages || []), userMessage]
+          };
+        }
+        return c;
+      });
+      onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
+      const updatedMessages = [...(activeRoom.messages || []), userMessage];
+      const newRooms = {
+        ...rooms,
+        [activeRoomId]: {
+          ...activeRoom,
+          messages: updatedMessages
+        }
+      };
       setRooms(newRooms);
-      localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(newRooms));
+      if (db && onUpdateDb) {
+        onUpdateDb({ ...db, employeeChatRooms: newRooms });
+      } else {
+        localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(newRooms));
+      }
     }
     const sentText = inputText;
     setInputText('');
@@ -209,40 +227,53 @@ export default function Messaging({ db, onUpdateDb }) {
         } else {
           replyText = "Thank you for sharing. I've logged this grievance query under private review. We will reach back out shortly.";
         }
-      } else if (activeRoom.type === 'team') {
+      } else if (activeRoom.type === 'team' || activeRoomId === 'team-room') {
         const randMember = teammates[Math.floor(Math.random() * teammates.length)];
         senderName = randMember.name;
-        replyText = `Thanks for the update Sarah! Looks good, let's sync up later.`;
+        replyText = `Thanks for the update Jane! Looks good, let's sync up later.`;
       } else if (activeRoom.type === 'dm') {
         const currentContact = teammates.find((c) => c.id === activeRoomId);
         senderName = currentContact ? currentContact.name : 'Teammate';
-        replyText = `Hey Sarah! Got your message. Let me review and get back to you soon.`;
+        replyText = `Hey Jane! Got your message. Let me review and get back to you soon.`;
+      } else {
+        return; // No bot response in general/ceo rooms
       }
 
       const botMessage = {
-        id: msgIdCounter++,
+        id: Date.now() + 1,
         sender: senderName,
         text: replyText,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isMe: false
       };
 
-      // Read rooms again to prevent stale closure references
-      const currentRooms = db?.employeeChatRooms || newRooms;
-      const latestRoom = currentRooms[activeRoomId] || activeRoom;
-      const finalRooms = {
-        ...currentRooms,
-        [activeRoomId]: {
-          ...latestRoom,
-          messages: [...(latestRoom.messages || []), botMessage]
-        }
-      };
-
-      if (db && onUpdateDb) {
-        onUpdateDb({ ...db, employeeChatRooms: finalRooms });
+      if (isCorporateChannel) {
+        const latestChannels = (db.chatChannels || []).map(c => {
+          if (c.id === activeRoomId) {
+            return {
+              ...c,
+              messages: [...(c.messages || []), botMessage]
+            };
+          }
+          return c;
+        });
+        onUpdateDb({ ...db, chatChannels: latestChannels });
       } else {
+        const currentRooms = db?.employeeChatRooms || rooms;
+        const latestRoom = currentRooms[activeRoomId] || activeRoom;
+        const finalRooms = {
+          ...currentRooms,
+          [activeRoomId]: {
+            ...latestRoom,
+            messages: [...(latestRoom.messages || []), botMessage]
+          }
+        };
         setRooms(finalRooms);
-        localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(finalRooms));
+        if (db && onUpdateDb) {
+          onUpdateDb({ ...db, employeeChatRooms: finalRooms });
+        } else {
+          localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(finalRooms));
+        }
       }
     }, 1200);
   };
@@ -305,7 +336,8 @@ export default function Messaging({ db, onUpdateDb }) {
       peerInfo = {
         name: peerContact.name,
         avatar: peerContact.avatar,
-        roomName: `1-on-1 with ${peerContact.name}`
+        roomName: `1-on-1 with ${peerContact.name}`,
+        channelId: activeRoomId
       };
     } else {
       // Find a teammate to host huddle with
@@ -313,7 +345,8 @@ export default function Messaging({ db, onUpdateDb }) {
       peerInfo = {
         name: host ? host.name : (targetPeerName || 'Engineering Team'),
         avatar: host ? host.avatar : undefined,
-        roomName: activeRoom.name
+        roomName: activeRoom.name,
+        channelId: activeRoomId
       };
     }
     setHuddlePeer(peerInfo);
@@ -377,15 +410,23 @@ export default function Messaging({ db, onUpdateDb }) {
     );
   };
 
+  useEffect(() => {
+    const mainEl = document.querySelector('.main-content');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  }, []);
+
   return (
-    <div className="component-container" style={{ height: 'calc(100vh - 120px)', minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
+    <div className="component-container" style={{ height: 'calc(100vh - 72px)', minHeight: '400px', display: 'flex', flexDirection: 'column', padding: '20px 24px 16px 24px', gap: '16px' }}>
       
       {/* Dynamic styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         .messaging-grid {
           display: grid;
           grid-template-columns: 1fr;
-          height: 100%;
+          flex: 1;
+          min-height: 0;
           border: 1px solid var(--border-color);
           border-radius: 12px;
           overflow: hidden;
@@ -453,6 +494,7 @@ export default function Messaging({ db, onUpdateDb }) {
           cursor: pointer;
           transition: all 0.2s ease;
           border-bottom: 1px solid var(--border-color);
+          border-left: 4px solid transparent;
         }
 
         .sidebar-item:hover {
@@ -461,7 +503,7 @@ export default function Messaging({ db, onUpdateDb }) {
 
         .sidebar-item.active {
           background-color: rgba(16, 185, 129, 0.05);
-          border-left: 3px solid #10b981;
+          border-left-color: #10b981;
         }
 
         /* Custom scrollbar styling */
@@ -540,72 +582,54 @@ export default function Messaging({ db, onUpdateDb }) {
 
             {/* Channels & Rooms List */}
             <div style={{ flex: 1, overflowY: 'auto' }} className="chat-sidebar-scroll">
-              {/* Team Chat Room */}
-              <div 
-                className={`sidebar-item ${activeRoomId === 'team-room' ? 'active' : ''}`}
-                onClick={() => handleSelectRoom('team-room')}
-              >
-                <div 
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                    color: 'hsl(150, 70%, 50%)', // --team-room-icon token
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <MessageCircle size={16} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>Team Chat Room</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Public Team Room</span>
-                </div>
-              </div>
-
-              {/* HR Grievance Private Room */}
-              <div 
-                className={`sidebar-item ${activeRoomId === 'grievance-room' ? 'active' : ''}`}
-                onClick={() => handleSelectRoom('grievance-room')}
-              >
-                <div 
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: 'rgba(139, 92, 246, 0.08)',
-                    color: 'hsl(265, 70%, 60%)', // --grievance-room-icon token
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Shield size={16} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>HR Grievance</span>
-                    {/* SLA countdown badge */}
-                    <span 
+              {(db.chatChannels || []).filter(c => c.members.includes('102')).map(c => {
+                const isActive = activeRoomId === c.id;
+                const isGrievance = c.type === 'grievance';
+                return (
+                  <div 
+                    key={c.id}
+                    className={`sidebar-item ${isActive ? 'active' : ''}`}
+                    onClick={() => handleSelectRoom(c.id)}
+                  >
+                    <div 
                       style={{
-                        fontSize: '9px',
-                        fontWeight: '700',
-                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                        color: 'var(--accent-gold)',
-                        padding: '1px 4px',
-                        borderRadius: '3px',
-                        border: '1px solid rgba(245, 158, 11, 0.15)'
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        backgroundColor: isGrievance ? 'rgba(139, 92, 246, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                        color: isGrievance ? 'hsl(265, 70%, 60%)' : 'hsl(150, 70%, 50%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
-                      title="SLA Response Time Limit"
                     >
-                      SLA: 48h
-                    </span>
+                      {isGrievance ? <Shield size={16} /> : <MessageCircle size={16} />}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>{c.name}</span>
+                        {isGrievance && (
+                          <span 
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: '700',
+                              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                              color: 'var(--accent-gold)',
+                              padding: '1px 4px',
+                              borderRadius: '3px',
+                              border: '1px solid rgba(245, 158, 11, 0.15)'
+                            }}
+                            title="SLA Response Time Limit"
+                          >
+                            SLA: 48h
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{c.label || 'Corporate Channel'}</span>
+                    </div>
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Private • Sophia Reed</span>
-                </div>
-              </div>
+                );
+              })}
 
               {/* Direct Messages Subheader */}
               <div style={{ padding: '14px 16px 6px 16px', fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>

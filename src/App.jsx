@@ -64,28 +64,60 @@ const INITIAL_TIMESHEETS = [
   }
 ];
 
-const INITIAL_EMPLOYEE_CHAT_ROOMS = {
-  'team-room': {
-    id: 'team-room',
-    name: 'Team Chat Room',
-    type: 'team',
-    desc: 'General engineering sprint updates, PR reviews, and deploy logs.',
+const INITIAL_CHAT_CHANNELS = [
+  {
+    id: 'general-channel',
+    name: '#general-channel',
+    label: 'Company General Room',
+    type: 'staff',
+    members: ['101', '102', '103', '104', '105', 'hr', 'ceo'],
     messages: [
-      { id: 1, sender: 'Marcus Vance', text: 'Hey team, morning! Please drop your standup items here. Also, let\'s aim to deploy the new build by 4 PM.', time: '9:15 AM', isMe: false },
-      { id: 2, sender: 'Alex Wong', text: 'Morning! Working on the payment gate validation fixes. PR is ready for review: #412.', time: '9:30 AM', isMe: false },
-      { id: 3, sender: 'Sarah Jenkins', text: 'Morning! I\'m wrapping up the Asset Requests validation and mobile tab changes. I\'ll review your PR, Alex, right after.', time: '9:35 AM', isMe: true }
+      { id: 1, sender: 'CEO (John Doe)', text: 'Welcome to the unified NSG-ERP communications channel!', time: 'Yesterday' }
     ]
   },
-  'grievance-room': {
-    id: 'grievance-room',
-    name: 'HR Grievance (Private)',
-    type: 'grievance',
-    desc: 'Confidential private channel with HR department.',
+  {
+    id: 'team-room',
+    name: '#team-room',
+    label: 'Engineering Team Room',
+    type: 'staff',
+    members: ['101', '102', '103', '105', 'hr'],
     messages: [
-      { id: 1, sender: 'Sophia Reed (HR Officer)', text: 'Hello Sarah, welcome to your secure grievance portal. Anything shared here remains private. How can I assist you today?', time: 'Yesterday', isMe: false }
+      { id: 1, sender: 'Marcus Vance', text: 'Hey team, morning! Please drop your standup items here. Also, let\'s aim to deploy the new build by 4 PM.', time: '9:15 AM' },
+      { id: 2, sender: 'Alex Wong', text: 'Morning! Working on the payment gate validation fixes. PR is ready for review: #412.', time: '9:30 AM' },
+      { id: 3, sender: 'Sarah Jenkins', text: 'Morning! I\'m wrapping up the Asset Requests validation and mobile tab changes. I\'ll review your PR, Alex, right after.', time: '9:35 AM' }
+    ]
+  },
+  {
+    id: 'grievance-room',
+    name: '#grievance-room',
+    label: 'HR Grievance (Private)',
+    type: 'grievance',
+    members: ['102', 'hr'],
+    messages: [
+      { id: 1, sender: 'Sophia Reed (HR Officer)', text: 'Hello Sarah, welcome to your secure grievance portal. Anything shared here remains private. How can I assist you today?', time: 'Yesterday' }
+    ]
+  },
+  {
+    id: 'ceo-channel',
+    name: '#ceo-channel',
+    label: 'CEO Suite Room',
+    type: 'management',
+    members: ['hr', 'ceo'],
+    messages: [
+      { id: 1, sender: 'CEO (John Doe)', text: "Sarah, let's audit the monthly payroll maker file before release.", time: '11:15 AM' }
+    ]
+  },
+  {
+    id: 'tl-channel',
+    name: '#tl-channel',
+    label: 'Team Lead Forum',
+    type: 'management',
+    members: ['hr', '101'],
+    messages: [
+      { id: 1, sender: 'TL (Michael Vance)', text: 'Are the Shift A attendance exceptions fully resolved?', time: '09:30 AM' }
     ]
   }
-};
+];
 
 const INITIAL_TASKS = [
   {
@@ -217,7 +249,7 @@ export default function App() {
         if (!parsed.supportTickets) parsed.supportTickets = [];
         if (!parsed.assets) parsed.assets = INITIAL_ASSETS;
         if (!parsed.assetRequests) parsed.assetRequests = [];
-        if (!parsed.employeeChatRooms) parsed.employeeChatRooms = INITIAL_EMPLOYEE_CHAT_ROOMS;
+        if (!parsed.chatChannels) parsed.chatChannels = INITIAL_CHAT_CHANNELS;
         
         // Remove pre-seeded mock logs & corrections for active testing employee ID 102
         // This ensures a completely blank sheet so only your live actions show up!
@@ -261,7 +293,7 @@ export default function App() {
       supportTickets: [],
       assets: INITIAL_ASSETS,
       assetRequests: [],
-      employeeChatRooms: INITIAL_EMPLOYEE_CHAT_ROOMS
+      chatChannels: INITIAL_CHAT_CHANNELS
     };
     localStorage.setItem('nsg_hr_db', JSON.stringify(seed));
     return seed;

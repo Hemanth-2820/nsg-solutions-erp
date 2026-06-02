@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Video, MessageSquare, Lock, Eye, MoreVertical, Edit2, Trash2, Reply, Forward, Bookmark, X, Check } from 'lucide-react';
+import HuddleModal from '../../../employee/HuddleModal';
 
 export function HrMessagingView({ db, onUpdateDb }) {
-  const [selectedChannel, setSelectedChannel]     = useState('hr-channel');
+  const [selectedChannel, setSelectedChannel]     = useState('general-channel');
   const [newMsg, setNewMsg]                       = useState('');
   const [isPrivate, setIsPrivate]                 = useState(false);
   const [mentionQuery, setMentionQuery]           = useState('');
@@ -15,74 +16,58 @@ export function HrMessagingView({ db, onUpdateDb }) {
   const [replyTo, setReplyTo]                     = useState(null);   // { id, sender, text }
   const [forwardMsg, setForwardMsg]               = useState(null);   // message being forwarded
   const [forwardTarget, setForwardTarget]         = useState('');
+  
+  // Roster & Channel Creator States
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showManageMembersModal, setShowManageMembersModal] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelLabel, setNewChannelLabel] = useState('');
+  const [newChannelType, setNewChannelType] = useState('staff');
+  const [selectedRosterMembers, setSelectedRosterMembers] = useState(['hr']);
+  const [huddlePeer, setHuddlePeer] = useState(null);
+
   const inputRef   = useRef(null);
   const menuRef    = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // ── Channel Configuration ────────────────────────────────────────────────────
-  const channels = {
-    management: [
-      { id: 'ceo-channel', name: '#ceo-channel', label: 'CEO Suite Room'   },
-      { id: 'tl-channel',  name: '#tl-channel',  label: 'Team Lead Forum'  }
-    ],
-    staff: [
-      { id: 'it-channel',                name: '#it-channel',                label: 'IT Systems Room'   },
-      { id: 'digital-marketing-channel', name: '#digital-marketing-channel', label: 'Digital Marketing'  },
-      { id: 'hr-channel',                name: '#hr-channel',                label: 'HR Dept Room'      },
-      { id: 'ba-channel',                name: '#ba-channel',                label: 'Business Analysis'  }
-    ],
+  // ── Channel Configuration (Derived dynamically from DB) ──────────────────────
+  const chatChannels = db?.chatChannels || [];
+
+  const derivedChannels = {
+    management: chatChannels.filter(c => c.type === 'management'),
+    staff: chatChannels.filter(c => c.type === 'staff'),
+    grievance: chatChannels.filter(c => c.type === 'grievance'),
     support: [
       { id: 'support-tickets', name: '🎫 Support Tickets', label: 'Employee IT/HR Tickets' }
     ]
   };
-  const allChannels = [...channels.management, ...channels.staff, ...channels.support];
 
-  // ── Seed message history ─────────────────────────────────────────────────────
-  const [channelMessages, setChannelMessages] = useState({
-    'ceo-channel': [
-      { id: 1, sender: 'CEO (John Doe)', text: "Sarah, let's audit the monthly payroll maker file before release.", time: '11:15 AM', isPrivate: false, mention: null, saved: false }
-    ],
-    'tl-channel': [
-      { id: 1, sender: 'TL (Michael Vance)', text: 'Are the Shift A attendance exceptions fully resolved?', time: '09:30 AM', isPrivate: false, mention: null, saved: false }
-    ],
-    'it-channel': [
-      { id: 1, sender: 'IT Lead', text: 'Provisions for MacBook NSG-MAC-093 are cleared.', time: 'Yesterday', isPrivate: false, mention: null, saved: false }
-    ],
-    'digital-marketing-channel': [
-      { id: 1, sender: 'Marketing Lead', text: 'Social campaign metrics for Q2 look excellent!', time: 'Yesterday', isPrivate: false, mention: null, saved: false }
-    ],
-    'hr-channel': [
-      { id: 1, sender: 'John Doe', text: 'Hi Sarah, is Vikram Malhotra interview scheduled?', time: '10:00 AM', isPrivate: false, mention: null, saved: false },
-      { id: 2, sender: 'You', text: 'Yes, enqueued under Jitsi WebRTC launchers!', time: '10:05 AM', isPrivate: false, mention: null, saved: false }
-    ],
-    'ba-channel': [
-      { id: 1, sender: 'BA Lead', text: 'Requirements doc for ERP sub-routing is completed.', time: '2 days ago', isPrivate: false, mention: null, saved: false }
-    ]
-  });
+  const allChannels = [
+    ...derivedChannels.management,
+    ...derivedChannels.staff,
+    ...derivedChannels.grievance,
+    ...derivedChannels.support
+  ];
 
-  // ── Channel members ──────────────────────────────────────────────────────────
+  const currentChannel = allChannels.find(c => c.id === selectedChannel);
+
+  // ── Channel members (Derived dynamically from DB) ─────────────────────────────
   const getChannelMembers = (channelId) => {
-    switch (channelId) {
-      case 'ceo-channel':  return [{ id: 'ceo', name: 'John Doe', role: 'CEO' }, { id: 'hr', name: 'Sarah Jenkins', role: 'HR Manager' }];
-      case 'tl-channel':   return [{ id: 'hr', name: 'Sarah Jenkins', role: 'HR Manager' }, { id: 'tl-1', name: 'Michael Vance', role: 'Engineering Lead' }, { id: 'tl-2', name: 'David Miller', role: 'Operations Lead' }];
-      case 'it-channel': {
-        const l = db.employees.filter(e => e.department === 'IT' || e.department === 'Engineering');
-        return l.length ? l.map(e => ({ id: e.id, name: e.name, role: e.designation })) : [{ id: 101, name: 'David Miller', role: 'IT Support' }, { id: 102, name: 'Jane Smith', role: 'Systems Engineer' }];
+    const ch = chatChannels.find(c => c.id === channelId);
+    if (!ch) return [];
+    return ch.members.map(memberId => {
+      if (memberId === 'hr') {
+        return { id: 'hr', name: 'Sarah Jenkins', role: 'HR Manager' };
       }
-      case 'digital-marketing-channel': {
-        const l = db.employees.filter(e => e.department === 'Marketing' || e.department === 'Sales');
-        return l.length ? l.map(e => ({ id: e.id, name: e.name, role: e.designation })) : [{ id: 103, name: 'Rahul Roy', role: 'Marketing Lead' }, { id: 104, name: 'Priya Nair', role: 'SEO Analyst' }];
+      if (memberId === 'ceo') {
+        return { id: 'ceo', name: 'John Doe', role: 'CEO' };
       }
-      case 'hr-channel': {
-        const l = db.employees.filter(e => e.department === 'HR');
-        return l.length ? l.map(e => ({ id: e.id, name: e.name, role: e.designation })) : [{ id: 'hr', name: 'Sarah Jenkins', role: 'HR Manager' }, { id: 105, name: 'John Doe', role: 'HR Recruiter' }];
+      const emp = db.employees?.find(e => String(e.id) === String(memberId));
+      if (emp) {
+        return { id: emp.id, name: emp.name, role: emp.designation };
       }
-      case 'ba-channel': {
-        const l = db.employees.filter(e => e.department === 'BA');
-        return l.length ? l.map(e => ({ id: e.id, name: e.name, role: e.designation })) : [{ id: 106, name: 'Rahul Roy', role: 'Business Analyst' }, { id: 107, name: 'David Miller', role: 'Systems Analyst' }];
-      }
-      default: return [];
-    }
+      return { id: memberId, name: memberId, role: 'Member' };
+    });
   };
 
   // Close context menu on outside click
@@ -128,7 +113,7 @@ export function HrMessagingView({ db, onUpdateDb }) {
   // ── Send message ─────────────────────────────────────────────────────────────
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMsg.trim()) return;
+    if (!newMsg.trim() || !currentChannel) return;
     const msg = {
       id: Date.now(),
       sender: 'You',
@@ -140,7 +125,18 @@ export function HrMessagingView({ db, onUpdateDb }) {
       saved: false,
       edited: false
     };
-    setChannelMessages(p => ({ ...p, [selectedChannel]: [...(p[selectedChannel] || []), msg] }));
+
+    const updatedChannels = chatChannels.map(c => {
+      if (c.id === selectedChannel) {
+        return {
+          ...c,
+          messages: [...(c.messages || []), msg]
+        };
+      }
+      return c;
+    });
+
+    onUpdateDb({ ...db, chatChannels: updatedChannels });
     setNewMsg(''); setMentionedMember(null); setIsPrivate(false);
     setShowMentionDropdown(false); setReplyTo(null);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
@@ -148,14 +144,29 @@ export function HrMessagingView({ db, onUpdateDb }) {
 
   // ── Context menu actions ─────────────────────────────────────────────────────
   const updateMsg = (id, patch) => {
-    setChannelMessages(p => ({
-      ...p,
-      [selectedChannel]: (p[selectedChannel] || []).map(m => m.id === id ? { ...m, ...patch } : m)
-    }));
+    const updatedChannels = chatChannels.map(c => {
+      if (c.id === selectedChannel) {
+        return {
+          ...c,
+          messages: (c.messages || []).map(m => m.id === id ? { ...m, ...patch } : m)
+        };
+      }
+      return c;
+    });
+    onUpdateDb({ ...db, chatChannels: updatedChannels });
   };
 
   const handleDelete = (id) => {
-    setChannelMessages(p => ({ ...p, [selectedChannel]: (p[selectedChannel] || []).filter(m => m.id !== id) }));
+    const updatedChannels = chatChannels.map(c => {
+      if (c.id === selectedChannel) {
+        return {
+          ...c,
+          messages: (c.messages || []).filter(m => m.id !== id)
+        };
+      }
+      return c;
+    });
+    onUpdateDb({ ...db, chatChannels: updatedChannels });
     setOpenMenuId(null);
   };
 
@@ -183,20 +194,92 @@ export function HrMessagingView({ db, onUpdateDb }) {
       id: Date.now(), sender: 'You',
       text: forwardMsg.text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isPrivate: false, mention: null, replyTo: null, saved: false, edited: false,
-      forwarded: true, forwardedFrom: selectedChannel
+      forwarded: true, forwardedFrom: currentChannel?.name || selectedChannel
     };
-    setChannelMessages(p => ({ ...p, [forwardTarget]: [...(p[forwardTarget] || []), fwdMsg] }));
+    const updatedChannels = chatChannels.map(c => {
+      if (c.id === forwardTarget) {
+        return {
+          ...c,
+          messages: [...(c.messages || []), fwdMsg]
+        };
+      }
+      return c;
+    });
+    onUpdateDb({ ...db, chatChannels: updatedChannels });
     setForwardMsg(null);
   };
 
   const handleSave = (id, saved) => { updateMsg(id, { saved: !saved }); setOpenMenuId(null); };
 
-  // ── Visible messages (private filter) ────────────────────────────────────────
-  const visibleMessages = (channelMessages[selectedChannel] || []).filter(m =>
-    m.isPrivate ? m.sender === 'You' || m.mention === 'Sarah Jenkins' : true
-  );
+  // ── Roster & Channel Creation Handlers ───────────────────────────────────────
+  const handleCreateChannel = (e) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    
+    const formattedName = newChannelName.startsWith('#') ? newChannelName.trim() : `#${newChannelName.trim()}`;
+    const newId = formattedName.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
+    
+    if (chatChannels.some(c => c.id === newId)) {
+      alert('A channel with this name already exists.');
+      return;
+    }
+    
+    const newChan = {
+      id: newId,
+      name: formattedName,
+      label: newChannelLabel.trim() || `${newChannelName} Channel`,
+      type: newChannelType,
+      members: selectedRosterMembers,
+      messages: [
+        {
+          id: Date.now(),
+          sender: 'System',
+          text: `Channel ${formattedName} created by HR Manager.`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]
+    };
+    
+    const updated = [...chatChannels, newChan];
+    onUpdateDb({ ...db, chatChannels: updated });
+    
+    setNewChannelName('');
+    setNewChannelLabel('');
+    setNewChannelType('staff');
+    setSelectedRosterMembers(['hr']);
+    setShowCreateModal(false);
+    setSelectedChannel(newId);
+  };
 
-  const isStaffChannel = channels.staff.some(ch => ch.id === selectedChannel);
+  const handleToggleMember = (memberId) => {
+    if (!currentChannel) return;
+    
+    let updatedMembers;
+    if (currentChannel.members.includes(memberId)) {
+      updatedMembers = currentChannel.members.filter(id => id !== memberId);
+    } else {
+      updatedMembers = [...currentChannel.members, memberId];
+    }
+    
+    const updatedChannels = chatChannels.map(c => {
+      if (c.id === selectedChannel) {
+        return {
+          ...c,
+          members: updatedMembers
+        };
+      }
+      return c;
+    });
+    
+    onUpdateDb({ ...db, chatChannels: updatedChannels });
+  };
+
+  // ── Visible messages (private filter) ────────────────────────────────────────
+  const visibleMessages = currentChannel ? (currentChannel.messages || []).filter(m =>
+    m.isPrivate ? m.sender === 'You' || m.mention === 'Sarah Jenkins' : true
+  ) : [];
+
+  const isStaffChannel = currentChannel ? (currentChannel.type === 'staff') : false;
 
   // ── Context Menu Item ─────────────────────────────────────────────────────────
   const MenuItem = ({ icon, label, onClick, danger }) => (
@@ -227,7 +310,7 @@ export function HrMessagingView({ db, onUpdateDb }) {
           <div>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🏛️ Management Forums</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {channels.management.map(ch => (
+              {derivedChannels.management.map(ch => (
                 <div key={ch.id} onClick={() => setSelectedChannel(ch.id)}
                   style={{ padding: '9px 12px', backgroundColor: selectedChannel === ch.id ? 'rgba(236,72,153,0.08)' : 'transparent', color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: selectedChannel === ch.id ? '600' : 'normal', border: selectedChannel === ch.id ? '1px solid rgba(236,72,153,0.2)' : '1px solid transparent', transition: 'all 0.15s' }}>
                   <MessageSquare size={13} style={{ color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-muted)', flexShrink: 0 }} />
@@ -239,7 +322,7 @@ export function HrMessagingView({ db, onUpdateDb }) {
           <div>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>👥 Staff Member Channels</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {channels.staff.map(ch => (
+              {derivedChannels.staff.map(ch => (
                 <div key={ch.id} onClick={() => setSelectedChannel(ch.id)}
                   style={{ padding: '9px 12px', backgroundColor: selectedChannel === ch.id ? 'rgba(236,72,153,0.08)' : 'transparent', color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: selectedChannel === ch.id ? '600' : 'normal', border: selectedChannel === ch.id ? '1px solid rgba(236,72,153,0.2)' : '1px solid transparent', transition: 'all 0.15s' }}>
                   <MessageSquare size={13} style={{ color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-muted)', flexShrink: 0 }} />
@@ -248,6 +331,20 @@ export function HrMessagingView({ db, onUpdateDb }) {
               ))}
             </div>
           </div>
+          {derivedChannels.grievance.length > 0 && (
+            <div>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🛡️ Support & Grievances</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {derivedChannels.grievance.map(ch => (
+                  <div key={ch.id} onClick={() => setSelectedChannel(ch.id)}
+                    style={{ padding: '9px 12px', backgroundColor: selectedChannel === ch.id ? 'rgba(236,72,153,0.08)' : 'transparent', color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: selectedChannel === ch.id ? '600' : 'normal', border: selectedChannel === ch.id ? '1px solid rgba(236,72,153,0.2)' : '1px solid transparent', transition: 'all 0.15s' }}>
+                    <MessageSquare size={13} style={{ color: selectedChannel === ch.id ? 'var(--accent-pink)' : 'var(--text-muted)', flexShrink: 0 }} />
+                    {ch.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Support Tickets Channel */}
           <div>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🎫 Support Queue</span>
@@ -266,9 +363,33 @@ export function HrMessagingView({ db, onUpdateDb }) {
               </div>
             </div>
           </div>
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto' }}>
-            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>🎥 Quick Actions</span>
-            <div style={{ padding: '10px 12px', background: 'rgba(236,72,153,0.05)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--accent-pink)', border: '1px dashed rgba(236,72,153,0.3)' }} onClick={() => alert('Creating secure WebRTC video room...')}>
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', letterSpacing: '0.5px' }}>🎥 Actions</span>
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                background: 'var(--accent-pink)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontSize: '12.5px',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 'bold',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              ➕ Create Channel
+            </button>
+            <div style={{ padding: '10px 12px', background: 'rgba(236,72,153,0.05)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--accent-pink)', border: '1px dashed rgba(236,72,153,0.3)' }} onClick={() => setHuddlePeer({ name: 'HR Interview', roomName: 'Screening Huddle', channelId: 'hr-interview-rtc' })}>
               <Video size={13} /> Launch Interview RTC
             </div>
           </div>
@@ -340,13 +461,70 @@ export function HrMessagingView({ db, onUpdateDb }) {
             <>
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <strong style={{ fontSize: '15px' }}>{allChannels.find(c => c.id === selectedChannel)?.name}</strong>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>({getChannelMembers(selectedChannel).length} members online)</span>
+              <strong style={{ fontSize: '15px' }}>{currentChannel?.name}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>({currentChannel?.members?.length || 0} members)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {isStaffChannel && <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Type <strong>@name</strong> to mention</span>}
+              {selectedChannel !== 'support-tickets' && (
+                <>
+                  {/* Manage Members Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowManageMembersModal(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-pink)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                  >
+                    ⚙️ Manage Members
+                  </button>
+
+                  {/* Start Huddle Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHuddlePeer({
+                        name: 'HR / Management',
+                        roomName: currentChannel?.name || 'HR Portal Conference',
+                        channelId: selectedChannel
+                      });
+                    }}
+                    style={{
+                      backgroundColor: 'rgba(236,72,153,0.08)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      color: 'var(--accent-pink)',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(236,72,153,0.15)'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(236,72,153,0.08)'}
+                  >
+                    <Video size={12} />
+                    <span>Start Huddle</span>
+                  </button>
+                </>
+              )}
               <span style={{ fontSize: '11px', color: 'var(--accent-pink)', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: 'rgba(236,72,153,0.08)', padding: '2px 8px', borderRadius: '4px' }}>
-                {isStaffChannel ? 'Staff Room' : 'Management Room'}
+                {currentChannel?.type === 'staff' ? 'Staff Room' : currentChannel?.type === 'management' ? 'Management Room' : 'Grievance Room'}
               </span>
             </div>
           </div>
@@ -538,6 +716,227 @@ export function HrMessagingView({ db, onUpdateDb }) {
             </div>
           </div>
         </div>
+      )}
+    </div>
+
+      {/* ── Create Channel Modal ──────────────────────────────────────────────── */}
+      {showCreateModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ width: '480px', maxHeight: '90vh', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderLeft: '4px solid var(--accent-pink)', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, color: 'var(--accent-pink)', display: 'flex', alignItems: 'center', gap: '8px' }}>➕ Create Corporate Channel</h3>
+              <button type="button" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setShowCreateModal(false)}><X size={16} /></button>
+            </div>
+            
+            <form onSubmit={handleCreateChannel} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Channel Name</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. #design-scrum"
+                  value={newChannelName}
+                  onChange={e => setNewChannelName(e.target.value)}
+                  style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Channel Description / Label</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Design & UX alignment room"
+                  value={newChannelLabel}
+                  onChange={e => setNewChannelLabel(e.target.value)}
+                  style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Channel Type</label>
+                <select
+                  value={newChannelType}
+                  onChange={e => setNewChannelType(e.target.value)}
+                  style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }}
+                >
+                  <option value="staff">Staff Room (General corporate communications)</option>
+                  <option value="management">Management Room (Restricted forums)</option>
+                  <option value="grievance">Grievance Room (Confidential/HR Support)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>Select Roster Members</label>
+                <div style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  
+                  {/* CEO option */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer', padding: '4px', borderRadius: '4px' }} className="member-select-row">
+                    <input
+                      type="checkbox"
+                      checked={selectedRosterMembers.includes('ceo')}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedRosterMembers(prev => [...prev, 'ceo']);
+                        else setSelectedRosterMembers(prev => prev.filter(id => id !== 'ceo'));
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <div>
+                      <strong>John Doe</strong> <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>(CEO)</span>
+                    </div>
+                  </label>
+
+                  {/* HR option */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer', padding: '4px', borderRadius: '4px' }} className="member-select-row">
+                    <input
+                      type="checkbox"
+                      checked={selectedRosterMembers.includes('hr')}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedRosterMembers(prev => [...prev, 'hr']);
+                        else setSelectedRosterMembers(prev => prev.filter(id => id !== 'hr'));
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <div>
+                      <strong>Sarah Jenkins</strong> <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>(HR Manager - You)</span>
+                    </div>
+                  </label>
+
+                  {/* Employees list */}
+                  {(db.employees || []).map(emp => (
+                    <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer', padding: '4px', borderRadius: '4px' }} className="member-select-row">
+                      <input
+                        type="checkbox"
+                        checked={selectedRosterMembers.includes(String(emp.id))}
+                        onChange={(e) => {
+                          const idStr = String(emp.id);
+                          if (e.target.checked) setSelectedRosterMembers(prev => [...prev, idStr]);
+                          else setSelectedRosterMembers(prev => prev.filter(id => id !== idStr));
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <div>
+                        <strong>{emp.name}</strong> <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>({emp.designation} · {emp.department})</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '10px' }}>
+                <button type="button" style={{ background: 'none', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary)' }} onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button type="submit" style={{ backgroundColor: 'var(--accent-pink)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>Create Channel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manage Members Modal ──────────────────────────────────────────────── */}
+      {showManageMembersModal && currentChannel && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ width: '460px', maxHeight: '80vh', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderLeft: '4px solid var(--accent-pink)', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--accent-pink)', display: 'flex', alignItems: 'center', gap: '8px' }}>⚙️ Manage Roster Members</h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: 'var(--text-muted)' }}>Channel: {currentChannel.name}</p>
+              </div>
+              <button type="button" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setShowManageMembersModal(false)}><X size={16} /></button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+              
+              {/* CEO */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div>
+                  <strong style={{ fontSize: '13px' }}>John Doe</strong>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>CEO</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleMember('ceo')}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: currentChannel.members.includes('ceo') ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                    color: currentChannel.members.includes('ceo') ? '#ef4444' : '#10b981',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {currentChannel.members.includes('ceo') ? '✕ Remove' : '＋ Add'}
+                </button>
+              </div>
+
+              {/* HR */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div>
+                  <strong style={{ fontSize: '13px' }}>Sarah Jenkins</strong>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>HR Manager (You)</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleMember('hr')}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: currentChannel.members.includes('hr') ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                    color: currentChannel.members.includes('hr') ? '#ef4444' : '#10b981',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {currentChannel.members.includes('hr') ? '✕ Remove' : '＋ Add'}
+                </button>
+              </div>
+
+              {/* Employees */}
+              {(db.employees || []).map(emp => {
+                const idStr = String(emp.id);
+                const isMember = currentChannel.members.includes(idStr);
+                return (
+                  <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div>
+                      <strong style={{ fontSize: '13px' }}>{emp.name}</strong>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{emp.designation} · {emp.department}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMember(idStr)}
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        backgroundColor: isMember ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                        color: isMember ? '#ef4444' : '#10b981',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isMember ? '✕ Remove' : '＋ Add'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '10px' }}>
+              <button type="button" style={{ backgroundColor: 'var(--accent-pink)', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }} onClick={() => setShowManageMembersModal(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dynamic Jitsi Huddle Overlay ────────────────────────────────────── */}
+      {huddlePeer && (
+        <HuddleModal
+          peer={huddlePeer}
+          onClose={() => setHuddlePeer(null)}
+        />
       )}
     </div>
   );
