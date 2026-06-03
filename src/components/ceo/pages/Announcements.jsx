@@ -21,8 +21,8 @@ const mockAnnouncements = [
   }
 ];
 
-export default function Announcements() {
-  const [announcements, setAnnouncements] = useState(mockAnnouncements);
+export default function Announcements({ db, onUpdateDb }) {
+  const announcements = db?.announcements && db.announcements.length > 0 ? db.announcements : mockAnnouncements;
   const [isSending, setIsSending] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -36,11 +36,22 @@ export default function Announcements() {
     if (!title || !body) return;
     setIsSending(true);
     setTimeout(() => {
-      setAnnouncements([{
+      const newAnn = {
         id: Date.now(), title, body, audience: audience || 'All Employees', priority,
         date: scheduleTime ? `Scheduled for ${new Date(scheduleTime).toLocaleString()}` : 'Just now', 
         author: 'CEO Office', readPct: 0, readCount: 0
-      }, ...announcements]);
+      };
+      
+      const currentAnns = db?.announcements && db.announcements.length > 0 ? db.announcements : mockAnnouncements;
+      const updated = [newAnn, ...currentAnns];
+      
+      if (onUpdateDb) {
+        onUpdateDb({
+          ...db,
+          announcements: updated
+        });
+      }
+      
       setIsSending(false);
       setTitle(''); setBody(''); setPriority('Normal'); setAudience('All Employees'); setScheduleTime('');
     }, 1000);

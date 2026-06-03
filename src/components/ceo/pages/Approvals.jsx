@@ -302,6 +302,25 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
       }
     });
 
+    // Pre-pend active resignations
+    const pendingResignations = (db?.resignations || []).filter(r => r.status === 'pending');
+    pendingResignations.forEach(r => {
+      const emp = (db?.employees || []).find(e => e.id === r.employee_id) || { name: 'Vikram Malhotra', designation: 'Senior Developer', department: 'Engineering' };
+      if (!list.some(a => a.id === `RES-${r.id}`)) {
+        list.unshift({
+          id: `RES-${r.id}`,
+          type: "Resignation",
+          requestedBy: emp.name,
+          dept: emp.department || "Engineering",
+          urgency: "High",
+          submittedAt: "Recent",
+          amount: null,
+          status: 'Pending',
+          resignationId: r.id
+        });
+      }
+    });
+
     // Sync any that were already approved or rejected in database
     const syncedList = list.map(a => {
       if (a.id.startsWith('PAY-')) {
@@ -311,6 +330,16 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
           if (run.status === 'bank_transferred') {
             return { ...a, status: 'Approved' };
           } else if (run.status === 'rejected') {
+            return { ...a, status: 'Denied' };
+          }
+        }
+      } else if (a.id.startsWith('RES-')) {
+        const resignId = Number(a.id.split('-')[1]);
+        const resign = db?.resignations?.find(r => r.id === resignId);
+        if (resign) {
+          if (resign.status === 'approved') {
+            return { ...a, status: 'Approved' };
+          } else if (resign.status === 'rejected') {
             return { ...a, status: 'Denied' };
           }
         }
@@ -380,6 +409,42 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
       alert(type === 'Approve'
         ? 'Payroll transfer signed! Payout dispatched and monthly payslips released to all employee dashboards.'
         : 'Payroll ledger rejected and sent back to HR.'
+      );
+    } else if (item && item.id.startsWith('RES-')) {
+      const resignId = item.resignationId;
+      const updatedResignations = (db?.resignations || []).map(r => {
+        if (r.id === resignId) {
+          return {
+            ...r,
+            status: type === 'Approve' ? 'approved' : 'rejected',
+            approved_by: 'CEO Suite',
+            approved_at: new Date().toISOString()
+          };
+        }
+        return r;
+      });
+
+      const newLogs = [...(db?.auditLogs || []), {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        initiator_id: 'CEO Suite',
+        module: 'Exits',
+        record_id: resignId,
+        action_type: type === 'Approve' ? 'verify_doc' : 'reject_doc',
+        change_diff: { resignation_status: type === 'Approve' ? 'approved' : 'rejected' },
+        ip_address: '192.168.1.101',
+        client_agent: 'Chrome / Windows'
+      }];
+
+      onUpdateDb({
+        ...db,
+        resignations: updatedResignations,
+        auditLogs: newLogs
+      });
+
+      alert(type === 'Approve'
+        ? 'Resignation exit approved! Offboarding clearance checklist updated in HR panel.'
+        : 'Resignation request rejected.'
       );
     } else {
       setApprovals(approvals.map(a => a.id === item.id ? { ...a, status: newStatus } : a));

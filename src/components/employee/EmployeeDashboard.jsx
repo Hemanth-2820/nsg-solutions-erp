@@ -273,6 +273,48 @@ export default function EmployeeDashboard({ db, onUpdateDb, setActiveTab }) {
             </div>
           </div>
 
+          {/* ── CEO Announcements ── */}
+          <div className="emp-card" style={{ marginTop: 16 }}>
+            <div className="emp-section-header" style={{ marginBottom: 14 }}>
+              <div className="emp-section-header__left">
+                <span style={{ fontSize: 16 }}>📢</span>
+                <span className="emp-section-header__title">CEO Announcements</span>
+                <span className="emp-badge-count" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>
+                  {(db?.announcements || []).length}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(db?.announcements || []).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No announcements yet.
+                </div>
+              ) : (
+                (db?.announcements || []).slice(0, 3).map(ann => (
+                  <div key={ann.id} style={{
+                    padding: '14px',
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderLeft: ann.priority === 'Urgent' ? '4px solid #f87171' : '4px solid #60a5fa',
+                    borderRadius: 8,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{ann.date}</span>
+                      {ann.priority === 'Urgent' && (
+                        <span style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800 }}>URGENT</span>
+                      )}
+                    </div>
+                    <strong style={{ fontSize: 13, color: '#fff' }}>{ann.title}</strong>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{ann.body}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* ── Right column ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 

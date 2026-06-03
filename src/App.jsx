@@ -49,6 +49,21 @@ const INITIAL_ASSETS = [
   { id: 'PHN-201', employee_id: 103, assetTag: 'NSG-PHN-201', type: 'Headset', name: 'Corporate Mobile (iPhone SE)', serialNumber: 'SN-201948', issueDate: '2024-05-10', condition: 'Good', returnStatus: 'Pending NOC', signedDate: null }
 ];
 
+const INITIAL_ANNOUNCEMENTS = [
+  { 
+    id: 1, title: 'Important Policy Update — April 2026', 
+    body: 'Please review the attached changes to the WFH policy. Managers must ensure team compliance by Friday.', 
+    priority: 'Urgent', audience: 'All Employees', date: 'Today, 09:00 AM', 
+    author: 'CEO Office', readPct: 65, readCount: 812
+  },
+  { 
+    id: 2, title: 'Q1 Townhall Recording Available', 
+    body: 'Thank you to everyone who joined our all-hands. The recording is now available on the intranet.', 
+    priority: 'Normal', audience: 'All Employees', date: 'Yesterday', 
+    author: 'CEO Office', readPct: 92, readCount: 1150
+  }
+];
+
 const INITIAL_TIMESHEETS = [
   {
     id: 1,
@@ -250,6 +265,7 @@ export default function App() {
         if (!parsed.assets) parsed.assets = INITIAL_ASSETS;
         if (!parsed.assetRequests) parsed.assetRequests = [];
         if (!parsed.chatChannels || parsed.chatChannels.length === 0) parsed.chatChannels = INITIAL_CHAT_CHANNELS;
+        if (!parsed.announcements || parsed.announcements.length === 0) parsed.announcements = INITIAL_ANNOUNCEMENTS;
         
         // Remove pre-seeded mock logs & corrections for active testing employee ID 102
         // This ensures a completely blank sheet so only your live actions show up!
@@ -293,7 +309,8 @@ export default function App() {
       supportTickets: [],
       assets: INITIAL_ASSETS,
       assetRequests: [],
-      chatChannels: INITIAL_CHAT_CHANNELS
+      chatChannels: INITIAL_CHAT_CHANNELS,
+      announcements: INITIAL_ANNOUNCEMENTS
     };
     localStorage.setItem('nsg_hr_db', JSON.stringify(seed));
     return seed;
