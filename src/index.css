@@ -1452,7 +1452,7 @@ div[style*="position: fixed"][style*="background-color: rgba(0,0,0,0.5)"] {
   font-size: 12px !important;
   font-weight: 600 !important;
   color: var(--text-secondary) !important;
-  margin-bottom: -6px !important;
+  margin-bottom: 6px;
   text-transform: uppercase !important;
   letter-spacing: 0.5px !important;
 }

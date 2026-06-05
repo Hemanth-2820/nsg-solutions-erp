@@ -1,14 +1,14 @@
 import React from 'react';
-import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Clock, FileText, AlertTriangle, MessageSquare, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, CheckSquare, Calendar, Clock, FileText, AlertTriangle, MessageSquare, CheckCircle, Award } from 'lucide-react';
 
 export default function TlSidebar({ activeTab, setActiveTab }) {
   const isDashboardActive = activeTab === 'dashboard';
   const isTeamActive = activeTab === 'team';
   const isProjectsActive = activeTab === 'projects';
   const isTasksActive = activeTab === 'tasks';
-  const isAttendanceActive = activeTab === 'attendance';
-  const isTimesheetsActive = activeTab === 'timesheets';
   const isApprovalsActive = activeTab === 'approvals';
+  const isPerformanceActive = activeTab === 'performance';
+  const isAttendanceActive = activeTab === 'attendance';
   const isReportsActive = activeTab === 'reports';
   const isEscalationsActive = activeTab === 'escalations';
   const isMessagingActive = activeTab === 'messaging';
@@ -79,6 +79,19 @@ export default function TlSidebar({ activeTab, setActiveTab }) {
       >
         <CheckCircle size={18} />
         <span>Approvals</span>
+      </button>
+
+      <button
+        className={`nav-link ${isPerformanceActive ? 'active' : ''}`}
+        onClick={() => setActiveTab('performance')}
+        style={isPerformanceActive ? { 
+          color: '#3b82f6',
+          borderLeftColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.05)' 
+        } : {}}
+      >
+        <Award size={18} />
+        <span>Performance</span>
       </button>
 
       <button

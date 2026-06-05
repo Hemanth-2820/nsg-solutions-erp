@@ -9,6 +9,7 @@ import Reports from './Reports/index';
 import Escalations from './Escalations/index';
 import Approvals from './Approvals/index';
 import MessagingAndMeet from './Messaging & Meet/messages.module.index';
+import Performance from './Performance/index';
 
 export default function Tl({ activeTab, setActiveTab, db, onUpdateDb, currentUser }) {
   const [selectedChatUser, setSelectedChatUser] = useState(null);
@@ -25,8 +26,9 @@ export default function Tl({ activeTab, setActiveTab, db, onUpdateDb, currentUse
       {activeTab === 'reports' && <Reports />}
       {activeTab === 'escalations' && <Escalations />}
       {activeTab === 'messaging' && <MessagingAndMeet initialSelectedChannel={selectedChatUser} db={db} onUpdateDb={onUpdateDb} />}
+      {activeTab === 'performance' && <Performance db={db} onUpdateDb={onUpdateDb} currentUser={currentUser} />}
       
-      {activeTab !== 'dashboard' && activeTab !== 'team' && activeTab !== 'projects' && activeTab !== 'tasks' && activeTab !== 'attendance' && activeTab !== 'timesheets' && activeTab !== 'approvals' && activeTab !== 'reports' && activeTab !== 'escalations' && activeTab !== 'messaging' && (
+      {activeTab !== 'dashboard' && activeTab !== 'team' && activeTab !== 'projects' && activeTab !== 'tasks' && activeTab !== 'attendance' && activeTab !== 'timesheets' && activeTab !== 'approvals' && activeTab !== 'reports' && activeTab !== 'escalations' && activeTab !== 'messaging' && activeTab !== 'performance' && (
         <>
           <div className="component-header">
             <div>

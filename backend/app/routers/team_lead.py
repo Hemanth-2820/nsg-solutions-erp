@@ -126,6 +126,23 @@ class EscalationResponse(BaseModel):
         from_attributes = True
 
 
+class ScorecardCreateRequest(BaseModel):
+    employee_name: str
+    rating: str
+    comments: str
+
+
+class ScorecardResponse(BaseModel):
+    id: int
+    employee_name: str
+    tl_name: str
+    rating: str
+    comments: str
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 # 1. Team Roster
@@ -405,3 +422,26 @@ def resolve_escalation(id: int, current_user: models.User = Depends(security.get
     db.commit()
     db.refresh(esc)
     return esc
+
+
+# 6. Performance Scorecards
+@router.get("/scorecards", response_model=List[ScorecardResponse])
+def get_submitted_scorecards(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    return db.query(models.AppraisalScorecard).filter(models.AppraisalScorecard.tl_name == current_user.name).all()
+
+
+@router.post("/scorecards", response_model=ScorecardResponse, status_code=status.HTTP_201_CREATED)
+def submit_scorecard(req: ScorecardCreateRequest, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    scorecard = models.AppraisalScorecard(
+        employee_name=req.employee_name,
+        tl_name=current_user.name,
+        rating=req.rating,
+        comments=req.comments
+    )
+    db.add(scorecard)
+    db.commit()
+    db.refresh(scorecard)
+    return scorecard
+

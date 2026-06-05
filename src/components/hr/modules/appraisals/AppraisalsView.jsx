@@ -4,7 +4,19 @@ export function AppraisalsView({ db, onUpdateDb }) {
   const [appraisalTab, setAppraisalTab] = useState('proposals'); // proposals | cycles | scorecards | promotions
   const [selectedEmpId, setSelectedEmpId] = useState(104);
 
-  const emp = db.employees.find(e => e.id === selectedEmpId) || { name: 'Staff', grade: 1, designation: 'Developer' };
+  const [employees, setEmployees] = useState(db?.employees || []);
+  const [appraisalCycles, setAppraisalCycles] = useState(db?.appraisalCycles || []);
+  const [incrementProposals, setIncrementProposals] = useState(db?.incrementProposals || []);
+  const [scorecards, setScorecards] = useState(db?.appraisalScorecards || [
+    { id: 1, employee_name: 'John Doe', tl_name: 'Sarah Jenkins', rating: 'A — Excellent', comments: 'Outstanding system design velocity. Handled HDFC payment integration flawlessly.' },
+    { id: 2, employee_name: 'Jane Smith', tl_name: 'Sarah Jenkins', rating: 'B — Competent', comments: 'Consistent uptime and server provisioning logs. Excellent IT compliance.' },
+    { id: 3, employee_name: 'Rahul Roy', tl_name: 'Vikram Sen', rating: 'C — Developing', comments: 'Good work on content SEO audits, but needs more punctuality on clock-ins.' }
+  ]);
+  const [promotionTracker, setPromotionTracker] = useState(db?.promotions || [
+    { id: 1, name: 'Priya Patel', current: 'Junior Architect', proposed: 'Systems Architect', status: 'approved_by_ceo' }
+  ]);
+
+  const emp = employees.find(e => e.id === selectedEmpId) || { name: 'Staff', grade: 1, designation: 'Developer' };
   
   // Base current CTC calculation simulation
   const currentMonthlyCTC = emp.grade * 15000 + 10000;
@@ -21,6 +33,68 @@ export function AppraisalsView({ db, onUpdateDb }) {
     setProposedCTC(Math.round(annual * 1.10));
   }, [selectedEmpId, emp.grade]);
 
+  // Fetch all appraisal data from backend on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = localStorage.getItem('nsg_jwt_token');
+      if (!token) return;
+
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      try {
+        const empRes = await fetch('/api/hr-portal/employees', { headers });
+        if (empRes.ok) {
+          const empData = await empRes.json();
+          setEmployees(empData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch employees", err);
+      }
+
+      try {
+        const cyclesRes = await fetch('/api/hr-portal/appraisal-cycles', { headers });
+        if (cyclesRes.ok) {
+          const cyclesData = await cyclesRes.json();
+          setAppraisalCycles(cyclesData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch cycles", err);
+      }
+
+      try {
+        const propRes = await fetch('/api/hr-portal/increment-proposals', { headers });
+        if (propRes.ok) {
+          const propData = await propRes.json();
+          setIncrementProposals(propData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch proposals", err);
+      }
+
+      try {
+        const scRes = await fetch('/api/hr-portal/appraisal-scorecards', { headers });
+        if (scRes.ok) {
+          const scData = await scRes.json();
+          setScorecards(scData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch scorecards", err);
+      }
+
+      try {
+        const promoRes = await fetch('/api/hr-portal/promotions', { headers });
+        if (promoRes.ok) {
+          const promoData = await promoRes.json();
+          setPromotionTracker(promoData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch promotions", err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Review Cycle States
   const [cycleName, setCycleName] = useState('');
   const [reviewPeriod, setReviewPeriod] = useState('annual');
@@ -30,6 +104,12 @@ export function AppraisalsView({ db, onUpdateDb }) {
   const [tlDeadline, setTlDeadline] = useState('');
   const [cycleStatus, setCycleStatus] = useState('active');
   const [isCreateCycleOpen, setIsCreateCycleOpen] = useState(false);
+
+  // Promotion modal states
+  const [isProposePromoOpen, setIsProposePromoOpen] = useState(false);
+  const [promoEmpName, setPromoEmpName] = useState('');
+  const [promoCurrentTitle, setPromoCurrentTitle] = useState('');
+  const [promoProposedTitle, setPromoProposedTitle] = useState('');
 
   // Reactively calculate values
   const handleCTCChange = (val) => {
@@ -44,18 +124,42 @@ export function AppraisalsView({ db, onUpdateDb }) {
     setProposedCTC(Math.round(annual));
   };
 
-  const handleProposeIncrement = (e) => {
+  const handleProposeIncrement = async (e) => {
     e.preventDefault();
 
     const newProposal = {
-      id: +new Date(),
       employee_id: selectedEmpId,
       current_ctc: currentAnnualCTC,
       proposed_ctc: proposedCTC,
       increment_pct: incrementPct,
       performance_band: 'A',
       effective_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      status: 'pending_ceo',
+      status: 'pending_ceo'
+    };
+
+    const token = localStorage.getItem('nsg_jwt_token');
+    if (token) {
+      try {
+        const response = await fetch('/api/hr-portal/increment-proposals', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(newProposal)
+        });
+        if (response.ok) {
+          const saved = await response.json();
+          setIncrementProposals(prev => [...prev, saved]);
+        }
+      } catch (err) {
+        console.error("Failed to post increment proposal", err);
+      }
+    }
+
+    const newProposalLocal = {
+      ...newProposal,
+      id: +new Date(),
       approved_by: null
     };
 
@@ -73,7 +177,7 @@ export function AppraisalsView({ db, onUpdateDb }) {
 
     onUpdateDb({
       ...db,
-      incrementProposals: [...(db.incrementProposals || []), newProposal],
+      incrementProposals: [...(db.incrementProposals || []), newProposalLocal],
       auditLogs: newLogs
     });
 
@@ -90,12 +194,11 @@ export function AppraisalsView({ db, onUpdateDb }) {
     }
   };
 
-  const handleCreateCycle = (e) => {
+  const handleCreateCycle = async (e) => {
     e.preventDefault();
     if (!cycleName.trim()) return;
 
     const newCycle = {
-      id: +new Date(),
       name: cycleName,
       period: reviewPeriod,
       start_date: startDate,
@@ -105,9 +208,34 @@ export function AppraisalsView({ db, onUpdateDb }) {
       status: cycleStatus
     };
 
+    const token = localStorage.getItem('nsg_jwt_token');
+    if (token) {
+      try {
+        const response = await fetch('/api/hr-portal/appraisal-cycles', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(newCycle)
+        });
+        if (response.ok) {
+          const saved = await response.json();
+          setAppraisalCycles(prev => [...prev, saved]);
+        }
+      } catch (err) {
+        console.error("Failed to post appraisal cycle", err);
+      }
+    }
+
+    const newCycleLocal = {
+      ...newCycle,
+      id: +new Date()
+    };
+
     onUpdateDb({
       ...db,
-      appraisalCycles: [...(db.appraisalCycles || []), newCycle]
+      appraisalCycles: [...(db.appraisalCycles || []), newCycleLocal]
     });
 
     setCycleName('');
@@ -120,15 +248,32 @@ export function AppraisalsView({ db, onUpdateDb }) {
     alert(`Performance Review Cycle ${cycleName} successfully launched globally!`);
   };
 
-  const scorecards = db.appraisalScorecards || [
-    { id: 1, employee_name: 'John Doe', tl_name: 'Sarah Jenkins', rating: 'A — Excellent', comments: 'Outstanding system design velocity. Handled HDFC payment integration flawlessly.' },
-    { id: 2, employee_name: 'Jane Smith', tl_name: 'Sarah Jenkins', rating: 'B — Competent', comments: 'Consistent uptime and server provisioning logs. Excellent IT compliance.' },
-    { id: 3, employee_name: 'Rahul Roy', tl_name: 'Vikram Sen', rating: 'C — Developing', comments: 'Good work on content SEO audits, but needs more punctuality on clock-ins.' }
-  ];
-
-  const promotionTracker = db.promotions || [
-    { id: 1, name: 'Priya Patel', current: 'Junior Architect', proposed: 'Systems Architect', status: 'approved_by_ceo' }
-  ];
+  const handleProposePromotion = async (e) => {
+    e.preventDefault();
+    if (!promoEmpName.trim() || !promoCurrentTitle.trim() || !promoProposedTitle.trim()) return;
+    const token = localStorage.getItem('nsg_jwt_token');
+    try {
+      const res = await fetch('/api/hr-portal/promotions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: promoEmpName, current: promoCurrentTitle, proposed: promoProposedTitle })
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setPromotionTracker(prev => [...prev, saved]);
+        setPromoEmpName('');
+        setPromoCurrentTitle('');
+        setPromoProposedTitle('');
+        setIsProposePromoOpen(false);
+        alert(`Promotion proposed for ${saved.name}! CEO has been notified for approval.`);
+      } else {
+        alert('Failed to submit promotion proposal.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error submitting promotion.');
+    }
+  };
 
   return (
     <div className="component-container">
@@ -171,22 +316,18 @@ export function AppraisalsView({ db, onUpdateDb }) {
           <button
             onClick={() => setIsCreateCycleOpen(true)}
             className="print-btn"
-            style={{
-              backgroundColor: 'var(--accent-pink)',
-              color: '#fff',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: 'var(--shadow-sm)'
-            }}
+            style={{ backgroundColor: 'var(--accent-pink)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: 'var(--shadow-sm)' }}
           >
             🚀 Launch Review Cycle
+          </button>
+        )}
+        {appraisalTab === 'promotions' && (
+          <button
+            onClick={() => setIsProposePromoOpen(true)}
+            className="print-btn"
+            style={{ backgroundColor: 'var(--accent-green, #22c55e)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: 'var(--shadow-sm)' }}
+          >
+            🏅 Propose Promotion
           </button>
         )}
       </div>
@@ -196,10 +337,10 @@ export function AppraisalsView({ db, onUpdateDb }) {
           <form onSubmit={handleProposeIncrement} className="card flex-2" style={{ borderLeft: '4px solid var(--accent-pink)', margin: 0 }}>
             <h3>CTC Projections Worksheet</h3>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '16px 0' }}>
-              <label style={{ fontSize: '12px' }}>Target Employee</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', margin: '16px 0' }}>
+              <label style={{ fontSize: '11px', display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', letterSpacing: '0.5px' }}>Target Employee</label>
               <select value={selectedEmpId} onChange={(e) => { setSelectedEmpId(Number(e.target.value)); }} style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '8px', borderRadius: '6px' }}>
-                {db.employees.map(e => (
+                {employees.map(e => (
                   <option key={e.id} value={e.id}>{e.name} ({e.designation})</option>
                 ))}
               </select>
@@ -215,9 +356,9 @@ export function AppraisalsView({ db, onUpdateDb }) {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+              <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '18px' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Proposed Annual CTC (₹)</label>
+                  <label style={{ fontSize: '11px', display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', letterSpacing: '0.5px' }}>Proposed Annual CTC (₹)</label>
                   <input
                     type="number"
                     value={proposedCTC}
@@ -227,7 +368,7 @@ export function AppraisalsView({ db, onUpdateDb }) {
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Increment Percentage (%)</label>
+                  <label style={{ fontSize: '11px', display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', letterSpacing: '0.5px' }}>Increment Percentage (%)</label>
                   <input
                     type="number"
                     value={incrementPct}
@@ -287,7 +428,7 @@ export function AppraisalsView({ db, onUpdateDb }) {
                 </tr>
               </thead>
               <tbody>
-                {db.appraisalCycles?.map((cy, idx) => (
+                {appraisalCycles?.map((cy, idx) => (
                   <tr key={idx}>
                     <td style={{ padding: '16px 40px' }}><strong>{cy.name}</strong></td>
                     <td style={{ padding: '16px 40px' }}><span className="badge-pill bg-blue">{cy.period.toUpperCase()}</span></td>
@@ -332,7 +473,24 @@ export function AppraisalsView({ db, onUpdateDb }) {
                     <button
                       className="print-btn"
                       style={{ padding: '4px 8px', fontSize: '10px' }}
-                      onClick={() => alert(`TL [${sc.tl_name}] notified! Calibrations scorecard audit requested.`)}
+                      onClick={async () => {
+                        const token = localStorage.getItem('nsg_jwt_token');
+                        try {
+                          const res = await fetch(`/api/hr-portal/appraisal-scorecards/${sc.id}/acknowledge`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            alert(data.message);
+                          } else {
+                            alert('Failed to acknowledge scorecard.');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          alert(`TL [${sc.tl_name}] notified! Calibrations scorecard audit requested.`);
+                        }
+                      }}
                     >
                       Acknowledge
                     </button>
@@ -357,20 +515,69 @@ export function AppraisalsView({ db, onUpdateDb }) {
               </tr>
             </thead>
             <tbody>
-              {promotionTracker.map((pr, idx) => (
-                <tr key={idx}>
-                  <td style={{ padding: '16px 40px' }}><strong>{pr.name}</strong></td>
-                  <td style={{ padding: '16px 40px' }}>{pr.current}</td>
-                  <td style={{ padding: '16px 40px' }}><span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{pr.proposed}</span></td>
-                  <td style={{ padding: '16px 40px' }}>
-                    <span className="badge-pill bg-green" style={{ textTransform: 'uppercase' }}>
-                      {pr.status.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {promotionTracker.length === 0 && (
+                <tr><td colSpan={4} style={{ padding: '32px 40px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No promotions proposed yet. Click "🏅 Propose Promotion" to begin.</td></tr>
+              )}
+              {promotionTracker.map((pr, idx) => {
+                const isPending = pr.status === 'pending_ceo';
+                const isApproved = pr.status === 'approved_by_ceo';
+                const badgeStyle = isPending
+                  ? { backgroundColor: 'rgba(234,179,8,0.2)', color: '#ca8a04', border: '1px solid #ca8a04' }
+                  : isApproved
+                  ? { backgroundColor: 'rgba(34,197,94,0.2)', color: '#16a34a', border: '1px solid #16a34a' }
+                  : { backgroundColor: 'rgba(239,68,68,0.2)', color: '#dc2626', border: '1px solid #dc2626' };
+                const badgeLabel = isPending ? '⏳ Pending CEO Review' : isApproved ? '✅ Approved by CEO' : '❌ Rejected';
+                return (
+                  <tr key={idx}>
+                    <td style={{ padding: '16px 40px' }}><strong>{pr.name}</strong></td>
+                    <td style={{ padding: '16px 40px' }}>{pr.current}</td>
+                    <td style={{ padding: '16px 40px' }}><span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{pr.proposed}</span></td>
+                    <td style={{ padding: '16px 40px' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', ...badgeStyle }}>
+                        {badgeLabel}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 🏅 PROPOSE PROMOTION MODAL */}
+      {isProposePromoOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <form
+            onSubmit={handleProposePromotion}
+            className="card"
+            style={{ width: '440px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid var(--accent-green, #22c55e)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, border: 'none', padding: 0, color: 'var(--accent-green, #22c55e)', display: 'flex', alignItems: 'center', gap: '8px' }}>🏅 Propose Promotion</h3>
+              <button type="button" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }} onClick={() => setIsProposePromoOpen(false)}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Employee Full Name</label>
+                <input type="text" value={promoEmpName} onChange={e => setPromoEmpName(e.target.value)} required placeholder="e.g. Rahul Sharma" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Current Title / Designation</label>
+                <input type="text" value={promoCurrentTitle} onChange={e => setPromoCurrentTitle(e.target.value)} required placeholder="e.g. Junior Developer" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Proposed New Designation</label>
+                <input type="text" value={promoProposedTitle} onChange={e => setPromoProposedTitle(e.target.value)} required placeholder="e.g. Senior Developer" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" onClick={() => setIsProposePromoOpen(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" style={{ padding: '8px 20px', background: 'var(--accent-green, #22c55e)', border: 'none', color: '#fff', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>Submit to CEO →</button>
+            </div>
+          </form>
         </div>
       )}
 

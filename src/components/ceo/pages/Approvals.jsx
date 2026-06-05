@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  CheckCircle, XCircle, Search, Filter, MessageSquare, Clock, ArrowRight, User, AlertCircle, X, Check
+  CheckCircle, XCircle, Search, Filter, MessageSquare, Clock, ArrowRight, User, AlertCircle, X, Check, TrendingUp
 } from 'lucide-react';
 import '../CEO.css';
 
@@ -37,7 +37,7 @@ const mockAuditTrail = [
   { time: "Oct 24, 11:00 AM", user: "HR System", action: "Flagged for CEO Approval" },
 ];
 
-const TABS = ['All', 'Payroll', 'Budget', 'Resignation', 'Policy'];
+const TABS = ['All', 'Payroll', 'Budget', 'Resignation', 'Policy', 'Promotions'];
 
 // ==========================================
 // COMPONENTS ARCHITECTURE (AS PER SPEC)
@@ -280,6 +280,39 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
   // Modal State
   const [modalConfig, setModalConfig] = useState({ isOpen: false, type: '', item: null });
 
+  // ---- Promotions state ----
+  const [promotions, setPromotions] = useState([]);
+  const [promoLoading, setPromoLoading] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('nsg_jwt_token');
+    if (!token) return;
+    fetch('/api/hr-portal/promotions', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setPromotions(data))
+      .catch(() => {});
+  }, []);
+
+  const handlePromoDecision = async (id, decision) => {
+    const token = localStorage.getItem('nsg_jwt_token');
+    setPromoLoading(true);
+    try {
+      const res = await fetch(`/api/hr-portal/promotions/${id}/decide`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ decision })
+      });
+      if (res.ok) {
+        setPromotions(prev => prev.map(p => p.id === id ? { ...p, status: decision } : p));
+        alert(decision === 'approved_by_ceo' ? '✅ Promotion approved! Employee notified.' : '❌ Promotion rejected. Employee notified.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
   // Sync approvals with the database
   useEffect(() => {
     let list = [...mockApprovals];
@@ -521,6 +554,7 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
         </div>
 
         {/* TABLE COMPONENT */}
+        {activeTab !== 'Promotions' ? (
         <ApprovalTable 
           data={approvals}
           activeTab={activeTab}
@@ -530,6 +564,62 @@ export default function ApprovalsPage({ db, onUpdateDb }) {
           selectedApproval={selectedApproval}
           onSelect={setSelectedApproval}
         />
+        ) : (
+          <div style={{ background: THEME.bgSurface, borderRadius: '12px', border: `1px solid ${THEME.border}`, overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: `1px solid ${THEME.border}`, background: THEME.bgBase, display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <TrendingUp size={20} color={THEME.primary} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '16px', color: THEME.textMain }}>Pending Promotion Proposals</div>
+                <div style={{ fontSize: '12px', color: THEME.textMuted, marginTop: '2px' }}>Review and approve or reject employee promotions proposed by HR</div>
+              </div>
+            </div>
+            {promotions.length === 0 ? (
+              <div style={{ padding: '48px', textAlign: 'center', color: THEME.textMuted }}>No promotion proposals pending. HR will submit them here.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: THEME.bgBase, borderBottom: `1px solid ${THEME.border}` }}>
+                    {['Employee', 'Current Title', 'Proposed Title', 'Status', 'Action'].map(h => (
+                      <th key={h} style={{ padding: '14px 24px', textAlign: 'left', color: THEME.textMuted, fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {promotions.map(pr => {
+                    const isPending = pr.status === 'pending_ceo';
+                    const isApproved = pr.status === 'approved_by_ceo';
+                    const badgeColor = isPending ? THEME.warning : isApproved ? '#16a34a' : THEME.danger;
+                    const badgeLabel = isPending ? '⏳ Pending' : isApproved ? '✅ Approved' : '❌ Rejected';
+                    return (
+                      <tr key={pr.id} style={{ borderBottom: `1px solid ${THEME.border}` }}>
+                        <td style={{ padding: '16px 24px', fontWeight: 600, color: THEME.textMain }}>{pr.name}</td>
+                        <td style={{ padding: '16px 24px', color: THEME.textMuted }}>{pr.current}</td>
+                        <td style={{ padding: '16px 24px', color: THEME.primary, fontWeight: 600 }}>{pr.proposed}</td>
+                        <td style={{ padding: '16px 24px' }}>
+                          <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: `${badgeColor}20`, color: badgeColor, border: `1px solid ${badgeColor}` }}>{badgeLabel}</span>
+                        </td>
+                        <td style={{ padding: '16px 24px' }}>
+                          {isPending ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button disabled={promoLoading} onClick={() => handlePromoDecision(pr.id, 'approved_by_ceo')} style={{ padding: '6px 14px', background: THEME.primary, color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={13} /> Approve
+                              </button>
+                              <button disabled={promoLoading} onClick={() => handlePromoDecision(pr.id, 'rejected_by_ceo')} style={{ padding: '6px 14px', background: 'transparent', color: THEME.danger, border: `1px solid ${THEME.danger}`, borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <X size={13} /> Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: THEME.textMuted, fontSize: '13px' }}>Decision recorded</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
 
         {/* DRAWER COMPONENT */}
         <ApprovalDetailDrawer 

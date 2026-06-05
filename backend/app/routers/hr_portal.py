@@ -352,7 +352,90 @@ class AuditLogResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class AppraisalCycleCreate(BaseModel):
+    name: str
+    period: str
+    start_date: str
+    end_date: str
+    self_deadline: str
+    tl_review_deadline: str
+    status: str
+
+
+class AppraisalCycleResponse(BaseModel):
+    id: int
+    name: str
+    period: str
+    start_date: str
+    end_date: str
+    self_deadline: str
+    tl_review_deadline: str
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class IncrementProposalCreate(BaseModel):
+    employee_id: int
+    current_ctc: float
+    proposed_ctc: float
+    increment_pct: float
+    performance_band: str
+    effective_date: str
+    status: str
+
+
+class IncrementProposalResponse(BaseModel):
+    id: int
+    employee_id: int
+    current_ctc: float
+    proposed_ctc: float
+    increment_pct: float
+    performance_band: str
+    effective_date: str
+    status: str
+    approved_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AppraisalScorecardResponse(BaseModel):
+    id: int
+    employee_name: str
+    tl_name: str
+    rating: str
+    comments: str
+
+    class Config:
+        from_attributes = True
+
+
+class PromotionResponse(BaseModel):
+    id: int
+    name: str
+    current: str
+    proposed: str
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class PromotionCreate(BaseModel):
+    name: str
+    current: str
+    proposed: str
+
+
+class PromotionDecide(BaseModel):
+    decision: str  # "approved_by_ceo" | "rejected_by_ceo"
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
+
 
 # 1. Telemetry Dashboard
 @router.get("/dashboard/metrics")
@@ -1315,3 +1398,165 @@ def get_lnd_progress(current_user: models.User = Depends(security.get_current_us
 def get_audit_logs(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
     return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).all()
+
+
+# 11. Appraisals & Increment Calibration
+DEFAULT_SCORECARDS = [
+    { "employee_name": 'John Doe', "tl_name": 'Sarah Jenkins', "rating": 'A — Excellent', "comments": 'Outstanding system design velocity. Handled HDFC payment integration flawlessly.' },
+    { "employee_name": 'Jane Smith', "tl_name": 'Sarah Jenkins', "rating": 'B — Competent', "comments": 'Consistent uptime and server provisioning logs. Excellent IT compliance.' },
+    { "employee_name": 'Rahul Roy', "tl_name": 'Vikram Sen', "rating": 'C — Developing', "comments": 'Good work on content SEO audits, but needs more punctuality on clock-ins.' }
+]
+
+DEFAULT_PROMOTIONS = [
+    { "name": 'Priya Patel', "current": 'Junior Architect', "proposed": 'Systems Architect', "status": 'approved_by_ceo' }
+]
+
+
+@router.get("/appraisal-cycles", response_model=List[AppraisalCycleResponse])
+def get_appraisal_cycles(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    return db.query(models.AppraisalCycle).all()
+
+
+@router.post("/appraisal-cycles", response_model=AppraisalCycleResponse, status_code=status.HTTP_201_CREATED)
+def create_appraisal_cycle(req: AppraisalCycleCreate, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    cycle = models.AppraisalCycle(
+        name=req.name,
+        period=req.period,
+        start_date=req.start_date,
+        end_date=req.end_date,
+        self_deadline=req.self_deadline,
+        tl_review_deadline=req.tl_review_deadline,
+        status=req.status
+    )
+    db.add(cycle)
+    db.commit()
+    db.refresh(cycle)
+    return cycle
+
+
+@router.get("/increment-proposals", response_model=List[IncrementProposalResponse])
+def get_increment_proposals(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    return db.query(models.IncrementProposal).all()
+
+
+@router.post("/increment-proposals", response_model=IncrementProposalResponse, status_code=status.HTTP_201_CREATED)
+def create_increment_proposal(req: IncrementProposalCreate, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    proposal = models.IncrementProposal(
+        employee_id=req.employee_id,
+        current_ctc=req.current_ctc,
+        proposed_ctc=req.proposed_ctc,
+        increment_pct=req.increment_pct,
+        performance_band=req.performance_band,
+        effective_date=req.effective_date,
+        status=req.status
+    )
+    db.add(proposal)
+    db.commit()
+    db.refresh(proposal)
+    return proposal
+
+
+@router.get("/appraisal-scorecards", response_model=List[AppraisalScorecardResponse])
+def get_appraisal_scorecards(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    scorecards = db.query(models.AppraisalScorecard).all()
+    if not scorecards:
+        for sc in DEFAULT_SCORECARDS:
+            db_sc = models.AppraisalScorecard(**sc)
+            db.add(db_sc)
+        db.commit()
+        scorecards = db.query(models.AppraisalScorecard).all()
+    return scorecards
+
+
+@router.get("/promotions", response_model=List[PromotionResponse])
+def get_promotions(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    promotions = db.query(models.Promotion).all()
+    if not promotions:
+        for pr in DEFAULT_PROMOTIONS:
+            db_pr = models.Promotion(**pr)
+            db.add(db_pr)
+        db.commit()
+        promotions = db.query(models.Promotion).all()
+    return promotions
+
+
+@router.post("/appraisal-scorecards/{id}/acknowledge")
+def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    scorecard = db.query(models.AppraisalScorecard).filter(models.AppraisalScorecard.id == id).first()
+    if not scorecard:
+        raise HTTPException(status_code=404, detail="Scorecard not found.")
+
+    # Find the TL user by name to send them a notification
+    tl_user = db.query(models.User).filter(models.User.name == scorecard.tl_name).first()
+    if tl_user:
+        db_notify = models.Notification(
+            user_id=tl_user.id,
+            message=f"HR has acknowledged your performance scorecard for {scorecard.employee_name} (Rating: {scorecard.rating}). Calibration audit confirmed.",
+            type="info"
+        )
+        db.add(db_notify)
+        db.commit()
+
+    return {"status": "success", "message": f"TL [{scorecard.tl_name}] notified. Calibration audit acknowledged."}
+
+
+@router.post("/promotions", response_model=PromotionResponse, status_code=status.HTTP_201_CREATED)
+def create_promotion(req: PromotionCreate, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    promo = models.Promotion(
+        name=req.name,
+        current=req.current,
+        proposed=req.proposed,
+        status="pending_ceo"
+    )
+    db.add(promo)
+    db.commit()
+    db.refresh(promo)
+
+    # Notify CEO users
+    ceo_users = db.query(models.User).filter(models.User.role == "ceo").all()
+    for ceo in ceo_users:
+        db.add(models.Notification(
+            user_id=ceo.id,
+            message=f"HR has proposed a promotion for {req.name}: {req.current} → {req.proposed}. Awaiting your approval.",
+            type="info"
+        ))
+    db.commit()
+
+    return promo
+
+
+@router.patch("/promotions/{id}/decide")
+def decide_promotion(id: int, req: PromotionDecide, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    if current_user.role not in ["ceo", "admin"]:
+        raise HTTPException(status_code=403, detail="Only the CEO can approve or reject promotions.")
+    promo = db.query(models.Promotion).filter(models.Promotion.id == id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promotion not found.")
+
+    promo.status = req.decision
+    db.commit()
+
+    # Notify the employee if found
+    emp_user = db.query(models.User).filter(models.User.name == promo.name).first()
+    if emp_user:
+        if req.decision == "approved_by_ceo":
+            msg = f"Congratulations! Your promotion from {promo.current} to {promo.proposed} has been approved by the CEO!"
+            ntype = "success"
+        else:
+            msg = f"Your proposed promotion from {promo.current} to {promo.proposed} was not approved at this time."
+            ntype = "warning"
+        db.add(models.Notification(user_id=emp_user.id, message=msg, type=ntype))
+        db.commit()
+
+    return {"status": "success", "decision": req.decision, "employee": promo.name}
+
+
+

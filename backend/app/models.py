@@ -530,4 +530,54 @@ class Announcement(Base):
     read_pct = Column(Float, default=0.0)
 
 
+class AppraisalCycle(Base):
+    __tablename__ = "appraisal_cycles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    period = Column(String, nullable=False)
+    start_date = Column(String, nullable=False)
+    end_date = Column(String, nullable=False)
+    self_deadline = Column(String, nullable=False)
+    tl_review_deadline = Column(String, nullable=False)
+    status = Column(String, default="active")
+
+
+class IncrementProposal(Base):
+    __tablename__ = "increment_proposals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    current_ctc = Column(Float, nullable=False)
+    proposed_ctc = Column(Float, nullable=False)
+    increment_pct = Column(Float, nullable=False)
+    performance_band = Column(String, default="A")
+    effective_date = Column(String, nullable=False)
+    status = Column(String, default="pending_ceo")
+    approved_by = Column(String, nullable=True)
+
+    employee = relationship("User", foreign_keys=[employee_id])
+
+
+class AppraisalScorecard(Base):
+    __tablename__ = "appraisal_scorecards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    employee_name = Column(String, nullable=False)
+    tl_name = Column(String, nullable=False)
+    rating = Column(String, nullable=False)
+    comments = Column(Text, nullable=False)
+
+
+class Promotion(Base):
+    __tablename__ = "promotions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    current = Column(String, nullable=False)
+    proposed = Column(String, nullable=False)
+    status = Column(String, default="approved_by_ceo")
+
+
+
 
