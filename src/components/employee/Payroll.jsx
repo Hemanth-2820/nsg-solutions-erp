@@ -77,7 +77,7 @@ function SubTabs({ active, setActive }) {
 
 // ─── Payslips Tab ─────────────────────────────────────────────────────────────
 
-function PayslipsTab({ db }) {
+function PayslipsTab({ db, employeeId }) {
   const [downloading, setDownloading] = useState(null);
 
   function handleDownload(id) {
@@ -85,9 +85,9 @@ function PayslipsTab({ db }) {
     setTimeout(() => setDownloading(null), 1800);
   }
 
-  // Filter only released payslips for Employee 102 (Jane Smith)
+  // Filter only released payslips for the dynamic employee
   const employeePayslips = (db?.payslips || []).filter(p => {
-    if (p.employee_id !== 102) return false;
+    if (p.employee_id !== employeeId) return false;
     // Payslips are visible if their payroll run status is 'bank_transferred'
     const matchingRun = db?.payrollRuns?.find(r => r.month === p.month && r.year === p.year);
     return matchingRun && matchingRun.status === 'bank_transferred';
@@ -228,9 +228,9 @@ function CtcBreakdownTab() {
 
 // ─── TDS Declaration Tab ──────────────────────────────────────────────────────
 
-function TdsDeclarationTab({ db, onUpdateDb }) {
+function TdsDeclarationTab({ db, onUpdateDb, employeeId }) {
   const currentDeclaration = (db?.tdsDeclarations || []).find(
-    d => d.employee_id === 102 && d.financial_year === '2026-27'
+    d => d.employee_id === employeeId && d.financial_year === '2026-27'
   );
 
   const [form, setForm] = useState(() => {
@@ -276,7 +276,7 @@ function TdsDeclarationTab({ db, onUpdateDb }) {
   function handleSubmit() {
     const newDecl = {
       id: Date.now(),
-      employee_id: 102,
+      employee_id: employeeId,
       financial_year: '2026-27',
       sec80c: parseFloat(form.sec80c) || 0,
       hra_rent: parseFloat(form.hra_rent) || 0,
@@ -289,7 +289,7 @@ function TdsDeclarationTab({ db, onUpdateDb }) {
 
     onUpdateDb({
       ...db,
-      tdsDeclarations: [...(db.tdsDeclarations || []).filter(d => !(d.employee_id === 102 && d.financial_year === '2026-27')), newDecl]
+      tdsDeclarations: [...(db.tdsDeclarations || []).filter(d => !(d.employee_id === employeeId && d.financial_year === '2026-27')), newDecl]
     });
     alert('Investment declaration successfully submitted to HR for verification!');
   }
@@ -338,7 +338,7 @@ function TdsDeclarationTab({ db, onUpdateDb }) {
               onClick={() => {
                 onUpdateDb({
                   ...db,
-                  tdsDeclarations: (db.tdsDeclarations || []).filter(d => !(d.employee_id === 102 && d.financial_year === '2026-27'))
+                  tdsDeclarations: (db.tdsDeclarations || []).filter(d => !(d.employee_id === employeeId && d.financial_year === '2026-27'))
                 });
               }} 
               style={{ marginLeft: 'auto', background: 'var(--pay-red)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}
@@ -612,7 +612,8 @@ function TaxCalculatorTab() {
 
 // ─── Root Payroll ─────────────────────────────────────────────────────────────
 
-export default function Payroll({ db, onUpdateDb }) {
+export default function Payroll({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
   const [activeTab, setActiveTab] = useState('payslips');
 
   return (
@@ -627,9 +628,9 @@ export default function Payroll({ db, onUpdateDb }) {
 
       <SubTabs active={activeTab} setActive={setActiveTab} />
 
-      {activeTab === 'payslips' && <PayslipsTab db={db} />}
+      {activeTab === 'payslips' && <PayslipsTab db={db} employeeId={employeeId} />}
       {activeTab === 'ctc'      && <CtcBreakdownTab />}
-      {activeTab === 'tds'      && <TdsDeclarationTab db={db} onUpdateDb={onUpdateDb} />}
+      {activeTab === 'tds'      && <TdsDeclarationTab db={db} onUpdateDb={onUpdateDb} employeeId={employeeId} />}
       {activeTab === 'tax'      && <TaxCalculatorTab />}
     </div>
   );

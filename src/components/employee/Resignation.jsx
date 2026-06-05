@@ -11,12 +11,12 @@ const defaultChecklist = [
   { id: 'kt_upload', label: 'KT document upload', completed: false, fileName: null }
 ];
 
-const EMPLOYEE_ID = 102;
+export default function Resignation({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
 
-export default function Resignation({ db, onUpdateDb }) {
   // Derive resignation from shared db if available, else from localStorage
   const getDbRecord = () =>
-    db?.resignations?.find(r => r.employee_id === EMPLOYEE_ID) || null;
+    db?.resignations?.find(r => r.employee_id === employeeId) || null;
 
   const getInitialData = () => {
     const dbRecord = getDbRecord();
@@ -94,7 +94,7 @@ export default function Resignation({ db, onUpdateDb }) {
     if (db && onUpdateDb) {
       const newRecord = {
         id: Date.now(),
-        employee_id: EMPLOYEE_ID,
+        employee_id: employeeId,
         resignation_date: data.submissionDate,
         LWD: data.lwdDate,
         status: 'pending',
@@ -105,7 +105,7 @@ export default function Resignation({ db, onUpdateDb }) {
         checklist: checklist
       };
       // Remove any existing record for this employee first
-      const filtered = (db.resignations || []).filter(r => r.employee_id !== EMPLOYEE_ID);
+      const filtered = (db.resignations || []).filter(r => r.employee_id !== employeeId);
       onUpdateDb({ ...db, resignations: [...filtered, newRecord] });
     } else {
       localStorage.setItem('nsg_employee_resignation_data', JSON.stringify(submission));
@@ -128,7 +128,7 @@ export default function Resignation({ db, onUpdateDb }) {
 
     if (db && onUpdateDb) {
       const updatedResigns = (db.resignations || []).map(r =>
-        r.employee_id === EMPLOYEE_ID ? { ...r, checklist: updated } : r
+        r.employee_id === employeeId ? { ...r, checklist: updated } : r
       );
       onUpdateDb({ ...db, resignations: updatedResigns });
     } else {
@@ -152,7 +152,7 @@ export default function Resignation({ db, onUpdateDb }) {
 
     if (db && onUpdateDb) {
       const updatedResigns = (db.resignations || []).map(r =>
-        r.employee_id === EMPLOYEE_ID ? { ...r, checklist: updated } : r
+        r.employee_id === employeeId ? { ...r, checklist: updated } : r
       );
       onUpdateDb({ ...db, resignations: updatedResigns });
     } else {
@@ -167,7 +167,7 @@ export default function Resignation({ db, onUpdateDb }) {
     // Write early relief request to db.resignations
     if (db && onUpdateDb) {
       const updated = (db.resignations || []).map(r =>
-        r.employee_id === EMPLOYEE_ID ? { ...r, earlyRelief: 'requested' } : r
+        r.employee_id === employeeId ? { ...r, earlyRelief: 'requested' } : r
       );
       onUpdateDb({ ...db, resignations: updated });
     } else {
@@ -198,7 +198,7 @@ export default function Resignation({ db, onUpdateDb }) {
     setEarlyReliefStatus(null);
     // Remove from shared db.resignations
     if (db && onUpdateDb) {
-      const filtered = (db.resignations || []).filter(r => r.employee_id !== EMPLOYEE_ID);
+      const filtered = (db.resignations || []).filter(r => r.employee_id !== employeeId);
       onUpdateDb({ ...db, resignations: filtered });
     } else {
       localStorage.removeItem('nsg_employee_resignation_data');
@@ -323,7 +323,7 @@ export default function Resignation({ db, onUpdateDb }) {
         {/* left/main area: Form OR Submission status card */}
         <div className="area-main">
           {resignationData ? (() => {
-              const dbRecord = db?.resignations?.find(r => r.employee_id === EMPLOYEE_ID);
+              const dbRecord = db?.resignations?.find(r => r.employee_id === employeeId);
               const hrStatus = dbRecord?.status || 'pending';
               const confirmedLwd = dbRecord?.LWD || resignationData.lwdDate;
               return (

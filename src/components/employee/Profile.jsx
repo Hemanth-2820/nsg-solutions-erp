@@ -25,9 +25,9 @@ const defaultDocs = [
   { id: 'degree', docType: 'Degree Certificate', status: 'missing', uploadedAt: null }
 ];
 
-export default function Profile({ db, onUpdateDb }) {
-  // The logged-in employee is always ID 102 (Jane Smith) in this portal
-  const EMPLOYEE_ID = 102;
+export default function Profile({ db, onUpdateDb, currentUser }) {
+  // The logged-in employee ID is derived dynamically
+  const EMPLOYEE_ID = currentUser?.id || 102;
   const empRecord = db?.employees?.find(e => e.id === EMPLOYEE_ID) || null;
 
   // --- Derive initial states from db.employees if available, else localStorage/defaults ---

@@ -287,8 +287,8 @@ function TodayStatusCard({ clockState, clockInTime, clockOutTime, elapsed }) {
 
 const ROWS_PER_PAGE = 7;
 
-function getFormattedLogs(db) {
-  const logs = (db?.attendanceLogs || []).filter(l => l.employee_id === 102);
+function getFormattedLogs(db, employeeId) {
+  const logs = (db?.attendanceLogs || []).filter(l => l.employee_id === employeeId);
   return logs.map(l => {
     const d = new Date(l.date);
     const inTimeStr = l.clock_in ? new Date(l.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : null;
@@ -317,10 +317,10 @@ function getFormattedLogs(db) {
   }).reverse(); // Latest logs first
 }
 
-function AttendanceLogTable({ db }) {
+function AttendanceLogTable({ db, employeeId }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [page, setPage] = useState(1);
-  const logData = getFormattedLogs(db);
+  const logData = getFormattedLogs(db, employeeId);
 
   const currentDate = new Date();
   const displayDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - monthOffset, 1);
@@ -436,7 +436,7 @@ function AttendanceLogTable({ db }) {
 //  WFH REQUEST FORM
 // ════════════════════════════════════════════════════════
 
-function WfhRequestForm({ db, onUpdateDb }) {
+function WfhRequestForm({ db, onUpdateDb, employeeId }) {
   const [form, setForm]       = useState({ wfh_date: '', wfh_reason: '' });
   const [errors, setErrors]   = useState({});
   const [gps, setGps]         = useState('idle');   // idle | searching | captured | failed
@@ -473,7 +473,7 @@ function WfhRequestForm({ db, onUpdateDb }) {
 
       const newLog = {
         id: +new Date(),
-        employee_id: 102, // Jane Smith
+        employee_id: employeeId,
         date: form.wfh_date,
         clock_in: `${form.wfh_date}T09:00:00Z`,
         clock_out: `${form.wfh_date}T18:00:00Z`,
@@ -569,7 +569,7 @@ function WfhRequestForm({ db, onUpdateDb }) {
 //  MISSED PUNCH CORRECTION FORM
 // ════════════════════════════════════════════════════════
 
-function CorrectionForm({ db, onUpdateDb }) {
+function CorrectionForm({ db, onUpdateDb, employeeId }) {
   const [form, setForm]       = useState({
     correction_date: '',
     missed_type:     'clock-in',
@@ -613,7 +613,7 @@ function CorrectionForm({ db, onUpdateDb }) {
       // Create new regularization request in db.attendanceCorrections
       const newCorrection = {
         id: +new Date(),
-        employee_id: 102, // Jane Smith
+        employee_id: employeeId,
         correction_date: form.correction_date,
         requested_clock_in: `${form.correction_date}T${form.requested_time}:00Z`,
         requested_clock_out: `${form.correction_date}T18:00:00Z`, // default clock-out
@@ -638,7 +638,8 @@ function CorrectionForm({ db, onUpdateDb }) {
 //  ROOT — EmpAttendancePage
 // ════════════════════════════════════════════════════════
 
-export default function Attendance({ db, onUpdateDb }) {
+export default function Attendance({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
   // Clock state: idle | searching | clocked-in | already
   const [clockState, setClockState] = useState('idle');
   const [gpsStatus,  setGpsStatus]  = useState('idle'); // idle | searching | ok | denied | error
@@ -665,7 +666,7 @@ export default function Attendance({ db, onUpdateDb }) {
   useEffect(() => {
     if (!db) return;
     const today = todayKey();
-    const todayLog = (db.attendanceLogs || []).find(l => l.employee_id === 102 && l.date === today);
+    const todayLog = (db.attendanceLogs || []).find(l => l.employee_id === employeeId && l.date === today);
     
     if (todayLog) {
       if (todayLog.clock_in && todayLog.clock_out) {
@@ -682,13 +683,13 @@ export default function Attendance({ db, onUpdateDb }) {
       setClockInTime(null);
       setClockOutTime(null);
     }
-  }, [db]);
+  }, [db, employeeId]);
 
   function saveClockIn(workMode) {
     const now = new Date();
     const newLog = {
       id: +now,
-      employee_id: 102, // Jane Smith
+      employee_id: employeeId,
       date: todayKey(),
       clock_in: now.toISOString(),
       clock_out: null,
@@ -756,7 +757,7 @@ export default function Attendance({ db, onUpdateDb }) {
     
     if (db && onUpdateDb) {
       const updatedLogs = (db.attendanceLogs || []).map(l => {
-        if (l.employee_id === 102 && l.date === today) {
+        if (l.employee_id === employeeId && l.date === today) {
           return {
             ...l,
             clock_out: now.toISOString()
@@ -804,9 +805,9 @@ export default function Attendance({ db, onUpdateDb }) {
 
         {/* Row 2: Log table | WFH form | Correction form */}
         <div className="att-bottom-grid">
-          <AttendanceLogTable db={db} />
-          <WfhRequestForm db={db} onUpdateDb={onUpdateDb} />
-          <CorrectionForm db={db} onUpdateDb={onUpdateDb} />
+          <AttendanceLogTable db={db} employeeId={employeeId} />
+          <WfhRequestForm db={db} onUpdateDb={onUpdateDb} employeeId={employeeId} />
+          <CorrectionForm db={db} onUpdateDb={onUpdateDb} employeeId={employeeId} />
         </div>
       </div>
     </div>

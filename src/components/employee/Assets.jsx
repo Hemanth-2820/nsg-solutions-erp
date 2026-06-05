@@ -16,8 +16,8 @@ const defaultRequests = [
   { id: 'REQ-402', assetType: 'Keyboard', reason: 'Ergonomic keyboard for wrist support', urgency: 'Low', status: 'Approved', createdAt: '2026-05-15' }
 ];
 
-export default function Assets({ db, onUpdateDb }) {
-  const EMPLOYEE_ID = 102;
+export default function Assets({ db, onUpdateDb, currentUser }) {
+  const EMPLOYEE_ID = currentUser?.id || 102;
 
   const getInitialRequests = () => {
     if (db?.assetRequests) {

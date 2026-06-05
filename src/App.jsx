@@ -5,6 +5,7 @@ import Ceo from './components/ceo/Ceo';
 import Hr from './components/hr/Hr';
 import Tl from './components/tl/Tl';
 import Employee from './components/employee/Employee';
+import Login from './components/auth/Login';
 import './index.css';
 
 // Seed defaults from HR package to establish unified global DB state
@@ -331,15 +332,30 @@ export default function App() {
   };
 
   const [db, setDb] = useState(() => loadDbSync());
+  const [token, setToken] = useState(() => localStorage.getItem('nsg_jwt_token') || '');
+  const [user, setUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(!!token);
 
   const updateDb = (newDb) => {
     localStorage.setItem('nsg_hr_db', JSON.stringify(newDb));
     setDb(newDb);
   };
 
+  // ── Helpers defined BEFORE useEffect so they are in scope ──────────────────
+
+  // Map a backend role string to the URL segment used in hash routing
+  const roleToRoute = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r === 'ceo' || r === 'admin') return 'CEO';
+    if (r === 'hr') return 'HR';
+    if (r === 'tl') return 'TL';
+    return 'Employee';
+  };
+
   // Hash Parser helper
   const parseHash = () => {
-    const hash = window.location.hash || '#/CEO/dashboard';
+    const hash = window.location.hash;
+    if (!hash) return { role: 'CEO', tab: 'dashboard', queryParams: new URLSearchParams() };
     const match = hash.match(/^#\/([^\/]+)\/([^\/?]+)(?:\?(.+))?$/);
     if (match) {
       const role = match[1];
@@ -350,23 +366,6 @@ export default function App() {
     }
     return { role: 'CEO', tab: 'dashboard', queryParams: new URLSearchParams() };
   };
-
-  const [route, setRoute] = useState(parseHash());
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      setRoute(parseHash());
-    };
-    
-    window.addEventListener('hashchange', handleHashChange);
-    
-    // Set initial hash if not set
-    if (!window.location.hash) {
-      window.location.hash = '#/CEO/dashboard';
-    }
-    
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
 
   const navigateTo = (role, tab, paramsObj = {}) => {
     const searchParams = new URLSearchParams();
@@ -379,14 +378,88 @@ export default function App() {
     window.location.hash = `#/${role}/${tab}` + (queryString ? `?${queryString}` : '');
   };
 
+  // ── Auth effect ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      setLoadingUser(false);
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Session expired');
+
+        const profile = await response.json();
+        setUser(profile);
+
+        // Navigate to the correct portal for this user's role
+        navigateTo(roleToRoute(profile.role), 'dashboard');
+      } catch (err) {
+        localStorage.removeItem('nsg_jwt_token');
+        setToken('');
+        setUser(null);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+
+    fetchProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const handleLoginSuccess = (newToken) => {
+    localStorage.setItem('nsg_jwt_token', newToken);
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('nsg_jwt_token');
+    setToken('');
+    setUser(null);
+    window.location.hash = '';
+  };
+
+  // ── Hash-based routing ──────────────────────────────────────────────────────
+  const [route, setRoute] = useState(parseHash);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(parseHash());
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Authorization check for routes — compare both sides as lowercase
+  const routeRoleLower = route.role.toLowerCase();
+  const userRoleLower  = (user?.role || '').toLowerCase();
+
+  const isAuthorized = (() => {
+    if (!user) return true; // not logged in yet, let the early return handle it
+    if (userRoleLower === 'admin' || userRoleLower === 'ceo') return true;
+    if (userRoleLower === 'hr')  return ['hr', 'tl', 'employee'].includes(routeRoleLower);
+    if (userRoleLower === 'tl')  return ['tl', 'employee'].includes(routeRoleLower);
+    return routeRoleLower === 'employee';
+  })();
+
+  // Redirect unauthorized route attempts AFTER render via effect to avoid side-effects during render
+  useEffect(() => {
+    if (user && !isAuthorized) {
+      navigateTo(roleToRoute(user.role), 'dashboard');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.role, user, isAuthorized]);
+
   const renderActiveComponent = () => {
     const props = {
       activeTab: route.tab,
       queryParams: route.queryParams,
       db: db,
       onUpdateDb: updateDb,
+      currentUser: user,
       setQueryParams: (paramsObj) => {
-        // Merge with current query parameters
         const currentParams = {};
         for (const [key, value] of route.queryParams.entries()) {
           currentParams[key] = value;
@@ -395,19 +468,41 @@ export default function App() {
       }
     };
 
-    switch (route.role) {
-      case 'CEO':
-        return <Ceo {...props} />;
-      case 'HR':
-        return <Hr {...props} />;
-      case 'TL':
-        return <Tl {...props} />;
-      case 'Employee':
-        return <Employee {...props} navigateTo={navigateTo} />;
-      default:
-        return <Ceo {...props} />;
+    // Normalise to uppercase for matching
+    switch (route.role.toUpperCase()) {
+      case 'CEO':      return <Ceo {...props} />;
+      case 'HR':       return <Hr {...props} />;
+      case 'TL':       return <Tl {...props} />;
+      case 'EMPLOYEE': return <Employee {...props} navigateTo={navigateTo} />;
+      default:         return <Employee {...props} navigateTo={navigateTo} />;
     }
   };
+
+  if (loadingUser) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#0f172a',
+        color: '#fff',
+        fontFamily: 'sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Validating Credentials...</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>Connecting to secure API server.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!token || !user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // While unauthorized, render nothing (the redirect effect will fire)
+  if (!isAuthorized) return null;
 
   return (
     <div className="app-container">
@@ -426,6 +521,8 @@ export default function App() {
           setActiveRole={(role) => navigateTo(role, 'dashboard')} 
           navigateTo={navigateTo}
           hrDb={db}
+          currentUser={user}
+          onLogout={handleLogout}
         />
 
         {/* Dynamic Inner Layout Body */}

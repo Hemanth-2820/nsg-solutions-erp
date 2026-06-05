@@ -162,7 +162,8 @@ function DayTotalBadge({ total }) {
 
 // ─── Main Timesheet ───────────────────────────────────────────────────────────
 
-export default function Timesheet({ db, onUpdateDb }) {
+export default function Timesheet({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
   const [weekOffset, setWeekOffset] = useState(0);
   const [rows, setRows] = useState(() =>
     SPRINT_TASKS.slice(0, 3).map(t => ({
@@ -189,7 +190,7 @@ export default function Timesheet({ db, onUpdateDb }) {
   useEffect(() => {
     if (!db) return;
     const weekStartDateStr = dates[0].toISOString().slice(0, 10);
-    const match = (db.timesheets || []).find(t => t.employee_id === 102 && t.week_start_date === weekStartDateStr);
+    const match = (db.timesheets || []).find(t => t.employee_id === employeeId && t.week_start_date === weekStartDateStr);
     
     if (match) {
       setRows(match.rows || []);
@@ -206,7 +207,7 @@ export default function Timesheet({ db, onUpdateDb }) {
       setStatus('draft');
       setRejectedReason('');
     }
-  }, [weekOffset, db]);
+  }, [weekOffset, db, employeeId]);
 
   // Autosave draft edits to global database
   const triggerAutoSave = (updatedRows) => {
@@ -214,12 +215,12 @@ export default function Timesheet({ db, onUpdateDb }) {
     const weekStartDateStr = dates[0].toISOString().slice(0, 10);
     
     const existingTimesheets = db.timesheets || [];
-    const index = existingTimesheets.findIndex(t => t.employee_id === 102 && t.week_start_date === weekStartDateStr);
+    const index = existingTimesheets.findIndex(t => t.employee_id === employeeId && t.week_start_date === weekStartDateStr);
     
     let updatedTimesheets = [...existingTimesheets];
     const tsObject = {
       id: index >= 0 ? existingTimesheets[index].id : +new Date(),
-      employee_id: 102,
+      employee_id: employeeId,
       week_start_date: weekStartDateStr,
       status: 'draft',
       rejection_comment: '',
@@ -265,7 +266,7 @@ export default function Timesheet({ db, onUpdateDb }) {
     if (!db || !onUpdateDb) return;
     const weekStartDateStr = dates[0].toISOString().slice(0, 10);
     const updatedTimesheets = (db.timesheets || []).map(t => {
-      if (t.employee_id === 102 && t.week_start_date === weekStartDateStr) {
+      if (t.employee_id === employeeId && t.week_start_date === weekStartDateStr) {
         return {
           ...t,
           status: 'submitted'

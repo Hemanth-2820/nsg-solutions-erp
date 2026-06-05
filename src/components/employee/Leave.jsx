@@ -121,7 +121,7 @@ function OverlapWarning({ visible, members, dates }) {
 }
 
 // ─── ApplyLeaveForm ───────────────────────────────────────────────────────────
-function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb }) {
+function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb, employeeId }) {
   const [leaveType, setLeaveType] = useState(prefillType || '');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -181,7 +181,7 @@ function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb }) {
 
       const newLeaveRequest = {
         id: Date.now(),
-        employee_id: 102, // Jane Smith
+        employee_id: employeeId,
         leave_type: typeAcronym,
         from_date: fromDate,
         to_date: toDate,
@@ -354,13 +354,14 @@ function LeaveHistoryTable({ history, onCancelRequest }) {
 }
 
 // ─── EmpLeavePage (root) ──────────────────────────────────────────────────────
-export default function Leave({ db, onUpdateDb }) {
+export default function Leave({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
   const [prefillType, setPrefillType] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   const formRef = useRef(null);
 
-  // Read Live balances of employee 102 (Jane Smith) from global DB
-  const myDbBalance = db?.leaveBalances?.find(b => b.employee_id === 102) || { CL: 12, SL: 8, EL: 15, Maternity: 0, Paternity: 0 };
+  // Read Live balances of the employee from global DB
+  const myDbBalance = db?.leaveBalances?.find(b => b.employee_id === employeeId) || { CL: 12, SL: 8, EL: 15, Maternity: 0, Paternity: 0 };
 
   const balances = [
     { type: 'CL',      label: 'Casual Leave',       used: 12 - (myDbBalance.CL || 0),  total: 12, color: 'var(--cl-color)'      },
@@ -369,9 +370,9 @@ export default function Leave({ db, onUpdateDb }) {
     { type: 'Maternity', label: 'Maternity Leave', used: 26 - (myDbBalance.Maternity || 0), total: 26, color: 'var(--compoff-color)' },
   ];
 
-  // Read Live request history of Jane Smith
+  // Read Live request history of the employee
   const myHistory = (db?.leaveRequests || [])
-    .filter(r => r.employee_id === 102)
+    .filter(r => r.employee_id === employeeId)
     .map(r => ({
       id: r.id,
       applied: r.applied_date || r.from_date,
@@ -426,7 +427,7 @@ export default function Leave({ db, onUpdateDb }) {
       <div className="lv-bottom-grid">
         {/* Apply Form */}
         <div ref={formRef}>
-          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} db={db} onUpdateDb={onUpdateDb} />
+          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} db={db} onUpdateDb={onUpdateDb} employeeId={employeeId} />
         </div>
 
         {/* History Table */}

@@ -3,13 +3,20 @@ import './Employee.css';
 
 const CURRENT_EMPLOYEE_ID = 102; // Jane Smith (logged-in employee)
 
-export default function EmployeeDashboard({ db, onUpdateDb, setActiveTab }) {
-  const employee = (db?.employees || []).find(e => e.id === CURRENT_EMPLOYEE_ID) || {
+export default function EmployeeDashboard({ db, onUpdateDb, setActiveTab, currentUser }) {
+  const employeeId = currentUser?.id || CURRENT_EMPLOYEE_ID;
+  const employee = currentUser ? {
+    id: currentUser.id,
+    name: currentUser.name,
+    designation: currentUser.designation || 'Senior Developer',
+    department: currentUser.department || 'Engineering',
+    employeeCode: currentUser.emp_id || 'NSG-EMP-102'
+  } : ((db?.employees || []).find(e => e.id === employeeId) || {
     name: 'Jane Smith',
     designation: 'Senior Developer',
     department: 'Engineering',
     employeeCode: 'NSG-EMP-102'
-  };
+  });
 
   // ── Clock-in state ────────────────────────────────────────────────
   const [clockedIn, setClockedIn] = useState(false);
@@ -57,22 +64,22 @@ export default function EmployeeDashboard({ db, onUpdateDb, setActiveTab }) {
   const isLate = hour >= 10 && !clockedIn;
 
   // ── Tasks for this employee ───────────────────────────────────────
-  const myTasks = (db?.tasks || []).filter(t => t.assignee === employee.name || t.assignee === 'Jane Smith');
+  const myTasks = (db?.tasks || []).filter(t => t.assignee === employee.name);
   const openTasks = myTasks.filter(t => t.status !== 'done');
   const doneTasks = myTasks.filter(t => t.status === 'done');
 
   // ── Leave balance ─────────────────────────────────────────────────
-  const myLeave = (db?.leaveBalances || []).find(b => b.employee_id === CURRENT_EMPLOYEE_ID);
+  const myLeave = (db?.leaveBalances || []).find(b => b.employee_id === employeeId);
 
   // ── Payslip ───────────────────────────────────────────────────────
-  const myPayslips = (db?.payslips || []).filter(p => p.employee_id === CURRENT_EMPLOYEE_ID);
+  const myPayslips = (db?.payslips || []).filter(p => p.employee_id === employeeId);
   const latestPayslip = myPayslips.sort((a, b) => (b.period || '').localeCompare(a.period || ''))[0];
 
   // ── Assets ───────────────────────────────────────────────────────
-  const myAssets = (db?.assets || []).filter(a => a.employee_id === CURRENT_EMPLOYEE_ID);
+  const myAssets = (db?.assets || []).filter(a => a.employee_id === employeeId);
 
   // ── Channels (unread badge) ───────────────────────────────────────
-  const myChannels = (db?.chatChannels || []).filter(c => c.members && c.members.includes(String(CURRENT_EMPLOYEE_ID)));
+  const myChannels = (db?.chatChannels || []).filter(c => c.members && c.members.includes(String(employeeId)));
 
   // ── Derived leave statistics ──────────────────────────────────────
   const clLeft = myLeave?.CL ?? 12;

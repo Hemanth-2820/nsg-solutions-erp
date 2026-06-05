@@ -13,10 +13,12 @@ const defaultClaims = [
   { id: 'EXP-104', date: '2026-05-25', category: 'client', amount: 1200, description: 'Dinner with international stakeholder', tlStatus: 'denied', hrStatus: 'pending', payrollStatus: 'pending', receiptName: 'restaurant_bill.png' }
 ];
 
-export default function Expenses({ db, onUpdateDb }) {
+export default function Expenses({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
+
   // Read and filter claims from the central database
   const employeeClaims = db
-    ? (db.expenseClaims || []).filter(c => c.employee_id === 102)
+    ? (db.expenseClaims || []).filter(c => c.employee_id === employeeId)
     : defaultClaims;
 
   // Map database fields to the UI-compatible fields, sorting so newest is first
@@ -61,7 +63,7 @@ export default function Expenses({ db, onUpdateDb }) {
   const handleSubmitClaim = (newClaimData) => {
     const newClaim = {
       id: `EXP-${Math.floor(100 + Math.random() * 900)}`,
-      employee_id: 102,
+      employee_id: employeeId,
       claim_date: newClaimData.date || new Date().toISOString().split('T')[0],
       date: newClaimData.date || new Date().toISOString().split('T')[0],
       category: newClaimData.category,

@@ -4,9 +4,9 @@ import GrievanceChat from './GrievanceChat';
 import FaqBase from './FaqBase';
 import { ShieldCheck, Ticket } from 'lucide-react';
 
-const EMPLOYEE_ID = 102;
+export default function Help({ db, onUpdateDb, currentUser }) {
+  const EMPLOYEE_ID = currentUser?.id || 102;
 
-export default function Help({ db, onUpdateDb }) {
   // Read existing tickets from shared db, filtered for this employee
   const getInitialTickets = () => {
     if (db?.supportTickets) {
@@ -21,7 +21,7 @@ export default function Help({ db, onUpdateDb }) {
   const [toast, setToast] = useState(null);
 
   const handleSubmitTicket = (newTicket) => {
-    const ticketWithMeta = { ...newTicket, employee_id: EMPLOYEE_ID, employee_name: 'Jane Smith' };
+    const ticketWithMeta = { ...newTicket, employee_id: EMPLOYEE_ID, employee_name: currentUser?.name || 'Jane Smith' };
 
     // Write to shared db.supportTickets so HR Messaging can see it
     if (db && onUpdateDb) {

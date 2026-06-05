@@ -19,6 +19,9 @@ class UserCreate(BaseModel):
     password: str
     role: str = "employee"  # employee, tl, ceo, hr, admin
     department: Optional[str] = None
+    designation: Optional[str] = None
+    phone: Optional[str] = None
+    emp_id: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -26,6 +29,9 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     department: Optional[str] = None
+    designation: Optional[str] = None
+    emp_id: Optional[str] = None
+    phone: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -51,7 +57,10 @@ def register(user_in: UserCreate, db: Session = Depends(database.get_db)):
         email=user_in.email,
         hashed_password=hashed_pwd,
         role=user_in.role,
-        department=user_in.department
+        department=user_in.department,
+        designation=user_in.designation,
+        phone=user_in.phone,
+        emp_id=user_in.emp_id,
     )
     db.add(db_user)
     db.commit()

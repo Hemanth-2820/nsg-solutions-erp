@@ -98,7 +98,10 @@ const DEFAULT_CHAT_CHANNELS = [
   }
 ];
 
-export default function Messaging({ db, onUpdateDb }) {
+export default function Messaging({ db, onUpdateDb, currentUser }) {
+  const employeeId = currentUser?.id || 102;
+  const employeeName = currentUser?.name || 'Jane Smith';
+
   const getInitialRooms = () => {
     if (db?.employeeChatRooms) {
       return db.employeeChatRooms;
@@ -224,7 +227,7 @@ export default function Messaging({ db, onUpdateDb }) {
   // Initialize WebSocket connection for real-time messaging
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:8000/employee-portal/ws/Jane-Smith`;
+    const wsUrl = `${wsProtocol}//${window.location.hostname}:8000/employee-portal/ws/${encodeURIComponent(employeeName)}`;
     const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
@@ -249,7 +252,7 @@ export default function Messaging({ db, onUpdateDb }) {
                       sender: newMsg.sender,
                       text: newMsg.text,
                       time: new Date(newMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      isMe: newMsg.sender === 'Jane Smith'
+                      isMe: newMsg.sender === employeeName
                     }
                   ]
                 };
@@ -281,7 +284,7 @@ export default function Messaging({ db, onUpdateDb }) {
                     sender: newMsg.sender,
                     text: newMsg.text,
                     time: new Date(newMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    isMe: newMsg.sender === 'Jane Smith'
+                    isMe: newMsg.sender === employeeName
                   }
                 ]
               }
@@ -304,7 +307,7 @@ export default function Messaging({ db, onUpdateDb }) {
     return () => {
       socket.close();
     };
-  }, [db, onUpdateDb]);
+  }, [db, onUpdateDb, employeeName]);
 
   // Send Message
   const handleSendMessage = (e) => {
@@ -316,7 +319,7 @@ export default function Messaging({ db, onUpdateDb }) {
       socketRef.current.send(JSON.stringify({
         channel_id: activeRoomId,
         text: inputText.trim(),
-        sender: 'Jane Smith'
+        sender: employeeName
       }));
       setInputText('');
       setAttachedFiles([]);
@@ -327,7 +330,7 @@ export default function Messaging({ db, onUpdateDb }) {
     const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMessage = {
       id: Date.now(),
-      sender: 'Jane Smith',
+      sender: employeeName,
       text: inputText.trim(),
       time: timeString,
       isMe: true,
@@ -741,7 +744,7 @@ export default function Messaging({ db, onUpdateDb }) {
 
             {/* Channels & Rooms List */}
             <div style={{ flex: 1, overflowY: 'auto' }} className="chat-sidebar-scroll">
-              {chatChannels.filter(c => c.members && c.members.includes('102')).map(c => {
+              {chatChannels.filter(c => c.members && c.members.includes(String(employeeId))).map(c => {
                 const isActive = activeRoomId === c.id;
                 const isGrievance = c.type === 'grievance';
                 return (
