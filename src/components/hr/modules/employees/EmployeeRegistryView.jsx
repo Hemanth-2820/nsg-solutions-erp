@@ -1,16 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Plus, Search, Download, Lock, RefreshCw, Trash2, Edit3 } from 'lucide-react';
+import { notify } from '../../utils/notify';
 
 export function EmployeeRegistryView({ db, onUpdateDb, queryParams, setQueryParams }) {
-  const notify = (msg, type = 'success') => {
-    if (window.toast) {
-      if (type === 'error') window.toast.error(msg);
-      else if (type === 'warning') window.toast.warning(msg);
-      else window.toast.success(msg);
-    } else {
-      alert(msg);
-    }
-  };
 
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('All');

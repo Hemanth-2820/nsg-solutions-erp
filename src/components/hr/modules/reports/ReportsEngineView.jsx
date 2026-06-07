@@ -10,7 +10,7 @@ export function ReportsEngineView({ db, onUpdateDb }) {
   const payrollRuns = db?.payrollRuns || [];
   const leaveBalances = db?.leaveBalances || [];
   const leaveRequests = db?.leaveRequests || [];
-  const attendanceRecords = db?.attendanceRecords || [];
+  const attendanceLogs = db?.attendanceLogs || [];
   const resignations = db?.resignations || [];
   const trainingProgress = db?.trainingProgress || [];
   const incrementProposals = db?.incrementProposals || [];
@@ -28,9 +28,13 @@ export function ReportsEngineView({ db, onUpdateDb }) {
   // 3. Payroll cost — last approved payroll run net total
   const approvedRuns = payrollRuns.filter(r => r.status === 'bank_transferred');
   const lastRun = approvedRuns[approvedRuns.length - 1];
+  const getPayslipNet = (p) => p.net_pay ?? p.net ?? 0;
+  const getPayslipGross = (p) => p.gross_pay ?? ((p.basic || 0) + (p.hra || 0) + (p.da || 0) + (p.allowances || 0));
+  const getPayslipDeductions = (p) => p.total_deductions ?? ((p.epf || 0) + (p.tds || 0));
+
   const payrollCost = lastRun
-    ? payslips.filter(p => p.payroll_run_id === lastRun.id).reduce((sum, p) => sum + (p.net_pay || 0), 0)
-    : payslips.reduce((sum, p) => sum + (p.net_pay || 0), 0);
+    ? payslips.filter(p => p.payroll_run_id === lastRun.id).reduce((sum, p) => sum + getPayslipNet(p), 0)
+    : payslips.reduce((sum, p) => sum + getPayslipNet(p), 0);
 
   // 4. Leave utilization — avg % of leave used across all employees
   const leaveUtil = leaveBalances.length > 0
@@ -215,9 +219,9 @@ export function ReportsEngineView({ db, onUpdateDb }) {
                       <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                         <td style={{ padding: '12px 16px', fontWeight: 600 }}>{emp?.name || `Emp #${p.employee_id}`}</td>
                         <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{p.period || '—'}</td>
-                        <td style={{ padding: '12px 16px' }}>₹{(p.gross_pay || 0).toLocaleString('en-IN')}</td>
-                        <td style={{ padding: '12px 16px', color: '#f87171' }}>-₹{(p.total_deductions || 0).toLocaleString('en-IN')}</td>
-                        <td style={{ padding: '12px 16px', color: '#10b981', fontWeight: 700 }}>₹{(p.net_pay || 0).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '12px 16px' }}>₹{getPayslipGross(p).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '12px 16px', color: '#f87171' }}>-₹{getPayslipDeductions(p).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '12px 16px', color: '#10b981', fontWeight: 700 }}>₹{getPayslipNet(p).toLocaleString('en-IN')}</td>
                       </tr>
                     );
                   })}

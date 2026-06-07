@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, FileText, ArrowRight, Video } from 'lucide-react';
+import { Calendar, FileText, ArrowRight } from 'lucide-react';
+import { notify } from '../../utils/notify';
 
 export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams }) {
   const subTab = queryParams?.get('subTab') || '';
@@ -13,10 +14,12 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
   const setShowAnalyzer = (val) => setQueryParams({ subTab: val ? 'analyzer' : '' });
 
   const candIdStr = queryParams?.get('candId');
-  const selectedCandidate = candIdStr ? db.candidates.find(c => String(c.id) === candIdStr) : null;
+  const candidates = db?.candidates || [];
+
+  const selectedCandidate = candIdStr ? candidates.find(c => String(c.id) === candIdStr) : null;
   const setSelectedCandidate = (cand) => setQueryParams({ subTab: cand ? 'offer' : '', candId: cand ? String(cand.id) : '' });
 
-  const analyzerCandidate = candIdStr ? db.candidates.find(c => String(c.id) === candIdStr) : null;
+  const analyzerCandidate = candIdStr ? candidates.find(c => String(c.id) === candIdStr) : null;
   const setAnalyzerCandidate = (cand) => {
     setQueryParams({ subTab: 'analyzer', candId: cand ? String(cand.id) : '' });
   };
@@ -47,7 +50,7 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
 
   const allRoles = Array.from(new Set([
     ...defaultRoles,
-    ...(db.candidates || []).map(c => c.role),
+    ...candidates.map(c => c.role),
     ...customRoles
   ])).filter(Boolean);
 
@@ -106,10 +109,11 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
         const createdEmp = result.employee;
         const tempPassword = result.temporary_password;
 
-        alert(`Candidate ${createdEmp.name} successfully converted to Employee! An onboarding checklist has been automatically assigned.\n\nTemporary Login Credentials:\nUsername (Email): ${createdEmp.email}\nPassword: ${tempPassword}\n\nPlease share these credentials with the employee so they can log in.`);
+        notify(`${createdEmp.name} is now an employee. Login: ${createdEmp.email} / ${tempPassword}`, 'success');
+        notify('Onboarding checklist assigned. View in Employee Registry and Onboarding.', 'info');
         await fetchCandidates();
       } catch (err) {
-        alert(`Error: ${err.message}`);
+        notify(`Error: ${err.message}`, 'error');
       }
       return;
     }
@@ -129,20 +133,21 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
         throw new Error(errData.detail || 'Failed to update candidate stage.');
       }
       await fetchCandidates();
+      notify(`Candidate moved to ${newStage}.`, 'success');
     } catch (err) {
-      alert(`Error updating stage: ${err.message}`);
+      notify(`Error updating stage: ${err.message}`, 'error');
     }
   };
 
   const handleScheduleInterview = (e) => {
     e.preventDefault();
-    alert('Interview scheduled successfully! WebRTC Guest video meeting link dispatched to candidate.');
+    notify('Interview scheduled (demo — not saved to database yet).', 'info');
     setShowScheduler(false);
   };
 
   const handleCreateOffer = (e) => {
     e.preventDefault();
-    alert('Offer letter generated and sent to candidate via e-sign channel.');
+    notify(`Offer generated: ₹${basicPay + hra + allowance}/month gross CTC (demo — not saved to database yet).`, 'info');
     setShowOfferForm(false);
   };
 
@@ -229,17 +234,17 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
   const handleStartParsing = async (e) => {
     e.preventDefault();
     if (!selectedFile) {
-      alert('Please upload a resume file first.');
+      notify('Please upload a resume file first.', 'warning');
       return;
     }
     if (!uploadedCandidateName.trim()) {
-      alert('Please enter a candidate name.');
+      notify('Please enter a candidate name.', 'warning');
       return;
     }
     
     const roleToAnalyze = uploadedCandidateRole === 'Other' ? customRole.trim() : uploadedCandidateRole;
     if (uploadedCandidateRole === 'Other' && !roleToAnalyze) {
-      alert('Please enter a custom target role.');
+      notify('Please enter a custom target role.', 'warning');
       return;
     }
 
@@ -284,7 +289,7 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
       setIsAnalyzing(false);
     } catch (err) {
       console.error(err);
-      alert(`Error analyzing resume: ${err.message}`);
+      notify(`Error analyzing resume: ${err.message}`, 'error');
       setIsAnalyzing(false);
     }
   };
@@ -315,7 +320,7 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
         throw new Error(errData.detail || 'Failed to import candidate.');
       }
       
-      alert(`Candidate ${uploadedCandidateName} successfully parsed and imported into Applied board!`);
+      notify(`${uploadedCandidateName} imported into Applied board.`, 'success');
       
       // Reset states
       setShowAnalyzer(false);
@@ -327,7 +332,7 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
       
       await fetchCandidates();
     } catch (err) {
-      alert(`Error importing candidate: ${err.message}`);
+      notify(`Error importing candidate: ${err.message}`, 'error');
     }
   };
 
@@ -354,11 +359,11 @@ export function RecruitmentView({ db, onUpdateDb, queryParams, setQueryParams })
           <div key={st.id} style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-color)', padding: '16px', minWidth: '0' }}>
             <h4 style={{ margin: '0 0 16px 0', borderBottom: '2px solid var(--border-color)', paddingBottom: '8px', textTransform: 'uppercase', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
               <span>{st.label}</span>
-              <span className="badge-pill bg-pink">{db.candidates.filter(c => c.stage === st.id).length}</span>
+              <span className="badge-pill bg-pink">{candidates.filter(c => c.stage === st.id).length}</span>
             </h4>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {db.candidates.filter(c => c.stage === st.id).map(cand => (
+              {candidates.filter(c => c.stage === st.id).map(cand => (
                 <div key={cand.id} className="metric-card" style={{ padding: '14px', gap: '8px', borderLeft: '3px solid var(--accent-pink)' }}>
                   <div style={{ fontWeight: '600', fontSize: '13px' }}>{cand.name}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{cand.role}</div>

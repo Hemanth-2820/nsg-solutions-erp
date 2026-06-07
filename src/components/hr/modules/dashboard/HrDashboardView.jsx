@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AlertTriangle, UserPlus, LogOut, Briefcase } from 'lucide-react';
 
-export function HrDashboardView({ db, onUpdateDb }) {
-  const openOnboardings = db.employees.filter(e => e.status === 'probation').length;
-  const pendingExits = db.resignations ? db.resignations.filter(r => r.status === 'pending').length : 1;
-  const activeRecruitments = db.candidates.filter(c => c.stage !== 'joined' && c.stage !== 'rejected').length;
-  const unresolvedGrievances = db.disciplinaryTickets ? db.disciplinaryTickets.filter(t => t.status === 'issued').length : 2;
+export function HrDashboardView({ db }) {
+  const employees = db?.employees || [];
+  const candidates = db?.candidates || [];
+  const disciplinaryTickets = db?.disciplinaryTickets || [];
+  const resignations = db?.resignations || [];
+
+  const openOnboardings = employees.filter(e => e.status === 'probation').length;
+  const pendingExits = resignations.filter(r => r.status === 'pending').length;
+  const activeRecruitments = candidates.filter(c => c.stage !== 'joined' && c.stage !== 'rejected').length;
+  const unresolvedGrievances = disciplinaryTickets.filter(t => t.status === 'issued').length;
 
   return (
     <div className="component-container">
@@ -70,7 +75,7 @@ export function HrDashboardView({ db, onUpdateDb }) {
             <h3>New Joiners Checklist Progress</h3>
           </div>
           <div className="card-content-list">
-            {db.employees.filter(e => e.status === 'probation').map(joiner => (
+            {employees.filter(e => e.status === 'probation').map(joiner => (
               <div key={joiner.id} className="strategic-list-item">
                 <div className="progress-ring-mini" style={{ backgroundColor: 'var(--accent-pink)' }}></div>
                 <div className="item-text">
@@ -89,8 +94,8 @@ export function HrDashboardView({ db, onUpdateDb }) {
             <h3 style={{ color: '#ef4444' }}>⚠️ SLA Watchdog Alerts</h3>
           </div>
           <div className="card-content-list">
-            {db.disciplinaryTickets.filter(t => t.status === 'issued').map(t => {
-              const emp = db.employees.find(e => e.id === t.employee_id) || { name: 'Unknown' };
+            {disciplinaryTickets.filter(t => t.status === 'issued').map(t => {
+              const emp = employees.find(e => e.id === t.employee_id) || { name: 'Unknown' };
               return (
                 <div key={t.id} className="strategic-list-item" style={{ borderLeft: '3px solid #ef4444', paddingLeft: '8px' }}>
                   <div className="item-text">
@@ -107,6 +112,3 @@ export function HrDashboardView({ db, onUpdateDb }) {
     </div>
   );
 }
-
-// ==========================================
-// 2. RECRUITMENT & ATS VIEW

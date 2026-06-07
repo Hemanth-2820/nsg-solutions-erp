@@ -38,7 +38,7 @@ export function HrSettingsView({ db, onUpdateDb }) {
 
   const handleResetDemoData = () => {
     if (confirm('Are you sure you want to reset the client-side simulated database? This will restore all original seed values.')) {
-      localStorage.clear();
+      localStorage.removeItem('nsg_hr_db');
       window.location.reload();
     }
   };

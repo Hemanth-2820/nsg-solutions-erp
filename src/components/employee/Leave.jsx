@@ -121,7 +121,7 @@ function OverlapWarning({ visible, members, dates }) {
 }
 
 // ─── ApplyLeaveForm ───────────────────────────────────────────────────────────
-function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb, employeeId }) {
+function ApplyLeaveForm({ prefillType, onSuccess, onRefreshData }) {
   const [leaveType, setLeaveType] = useState(prefillType || '');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -168,44 +168,46 @@ function ApplyLeaveForm({ prefillType, onSuccess, db, onUpdateDb, employeeId }) 
     return e;
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+
+    const typeAcronym = leaveType === 'Casual Leave' ? 'CL' : leaveType === 'Sick Leave' ? 'SL' : leaveType === 'Earned Leave' ? 'EL' : leaveType === 'Comp Off' ? 'CompOff' : 'Maternity';
+    const payload = {
+      leave_type: typeAcronym,
+      from_date: fromDate,
+      to_date: toDate,
+      days: parseFloat(dayCount),
+      reason: reason || 'Planned leave.'
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/employee-portal/leave/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Failed to submit leave request');
       setSuccess(true);
-
-      const typeAcronym = leaveType === 'Casual Leave' ? 'CL' : leaveType === 'Sick Leave' ? 'SL' : leaveType === 'Earned Leave' ? 'EL' : leaveType === 'Comp Off' ? 'CompOff' : 'Maternity';
-
-      const newLeaveRequest = {
-        id: Date.now(),
-        employee_id: employeeId,
-        leave_type: typeAcronym,
-        from_date: fromDate,
-        to_date: toDate,
-        days: parseFloat(dayCount),
-        reason: reason || 'Planned leave.',
-        status: 'pending',
-        applied_date: new Date().toISOString().slice(0, 10),
-        tl_approved_at: null,
-        hr_approved_at: null
-      };
-
-      if (db && onUpdateDb) {
-        const currentRequests = Array.isArray(db.leaveRequests) ? db.leaveRequests : [];
-        const updatedRequests = [...currentRequests, newLeaveRequest];
-        onUpdateDb({ ...db, leaveRequests: updatedRequests });
-      }
-
+      if (onRefreshData) onRefreshData();
+    } catch (error) {
+      console.error(error);
+      alert('Error submitting leave request');
+    } finally {
+      setLoading(false);
       setTimeout(() => {
         setSuccess(false);
         setLeaveType(''); setFromDate(''); setToDate('');
         setReason(''); setDayCount(0); setShowOverlap(false);
-        onSuccess && onSuccess();
+        if (onSuccess) onSuccess();
       }, 1800);
-    }, 1200);
+    }
   }
 
   const LEAVE_TYPES = ['Casual Leave', 'Sick Leave', 'Earned Leave', 'Comp Off', 'Maternity/Paternity'];
@@ -354,14 +356,48 @@ function LeaveHistoryTable({ history, onCancelRequest }) {
 }
 
 // ─── EmpLeavePage (root) ──────────────────────────────────────────────────────
-export default function Leave({ db, onUpdateDb, currentUser }) {
-  const employeeId = currentUser?.id || 102;
+export default function Leave() {
   const [prefillType, setPrefillType] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   const formRef = useRef(null);
+  
+  const [myDbBalance, setMyDbBalance] = useState({ CL: 12, SL: 8, EL: 15, Maternity: 0, Paternity: 0 });
+  const [myHistory, setMyHistory] = useState([]);
 
-  // Read Live balances of the employee from global DB
-  const myDbBalance = db?.leaveBalances?.find(b => b.employee_id === employeeId) || { CL: 12, SL: 8, EL: 15, Maternity: 0, Paternity: 0 };
+  const fetchData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
+      const balRes = await fetch('/api/employee-portal/leave/my-balances', { headers });
+      if (balRes.ok) {
+        const balData = await balRes.json();
+        setMyDbBalance(balData);
+      }
+      
+      const reqRes = await fetch('/api/employee-portal/leave/my-requests', { headers });
+      if (reqRes.ok) {
+        const reqData = await reqRes.json();
+        const history = reqData.map(r => ({
+          id: r.id,
+          applied: r.from_date,
+          type: r.leave_type,
+          from: r.from_date,
+          to: r.to_date,
+          days: r.days,
+          status: r.status === 'hr_approved' ? 'Approved' : r.status === 'tl_approved' ? 'TL Approved' : r.status === 'denied' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : r.status.charAt(0).toUpperCase() + r.status.slice(1),
+          approver: r.status === 'hr_approved' ? 'HR Manager' : r.status === 'tl_approved' ? 'Sarah Jenkins' : '—'
+        }));
+        setMyHistory(history);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const balances = [
     { type: 'CL',      label: 'Casual Leave',       used: 12 - (myDbBalance.CL || 0),  total: 12, color: 'var(--cl-color)'      },
@@ -369,21 +405,6 @@ export default function Leave({ db, onUpdateDb, currentUser }) {
     { type: 'EL',      label: 'Earned Leave',        used: 15 - (myDbBalance.EL || 0),  total: 15, color: 'var(--el-color)'      },
     { type: 'Maternity', label: 'Maternity Leave', used: 26 - (myDbBalance.Maternity || 0), total: 26, color: 'var(--compoff-color)' },
   ];
-
-  // Read Live request history of the employee
-  const myHistory = (db?.leaveRequests || [])
-    .filter(r => r.employee_id === employeeId)
-    .map(r => ({
-      id: r.id,
-      applied: r.applied_date || r.from_date,
-      type: r.leave_type,
-      from: r.from_date,
-      to: r.to_date,
-      days: r.days,
-      status: r.status === 'hr_approved' ? 'Approved' : r.status === 'tl_approved' ? 'TL Approved' : r.status === 'denied' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : r.status.charAt(0).toUpperCase() + r.status.slice(1),
-      approver: r.status === 'hr_approved' ? 'HR Manager' : r.status === 'tl_approved' ? 'Sarah Jenkins' : '—'
-    }))
-    .reverse();
 
   function handleApply(type) {
     const match = balances.find(b => b.type === type);
@@ -395,10 +416,18 @@ export default function Leave({ db, onUpdateDb, currentUser }) {
     setPrefillType('');
   }
 
-  function handleCancelConfirm(id) {
-    if (db && onUpdateDb) {
-      const updatedRequests = db.leaveRequests.map(r => r.id === id ? { ...r, status: 'cancelled' } : r);
-      onUpdateDb({ ...db, leaveRequests: updatedRequests });
+  async function handleCancelConfirm(id) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/employee-portal/leave/request/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to cancel request');
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert('Error cancelling leave request');
     }
     setCancelTarget(null);
   }
@@ -427,7 +456,7 @@ export default function Leave({ db, onUpdateDb, currentUser }) {
       <div className="lv-bottom-grid">
         {/* Apply Form */}
         <div ref={formRef}>
-          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} db={db} onUpdateDb={onUpdateDb} employeeId={employeeId} />
+          <ApplyLeaveForm prefillType={prefillType} onSuccess={handleSuccess} onRefreshData={fetchData} />
         </div>
 
         {/* History Table */}

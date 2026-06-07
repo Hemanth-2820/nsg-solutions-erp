@@ -175,6 +175,32 @@ def request_leave(req: LeaveRequestCreate, current_user: models.User = Depends(s
     db.commit()
     db.refresh(new_req)
     return new_req
+    
+@router.post("/leave/request/{id}/cancel", response_model=LeaveRequestResponse)
+def cancel_leave(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == id, models.LeaveRequest.user_id == current_user.id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found.")
+    
+    if req.status not in ["pending", "tl_approved", "hr_approved"]:
+        raise HTTPException(status_code=400, detail="Cannot cancel a leave request in its current state.")
+        
+    was_hr_approved = (req.status == "hr_approved")
+    req.status = "cancelled"
+    
+    # Revert leave balance if it was already HR approved
+    if was_hr_approved:
+        bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == current_user.id).first()
+        if bal:
+            if req.leave_type == "CL": bal.CL += req.days
+            elif req.leave_type == "SL": bal.SL += req.days
+            elif req.leave_type == "EL": bal.EL += req.days
+            elif req.leave_type == "Maternity": bal.Maternity += req.days
+            elif req.leave_type == "Paternity": bal.Paternity += req.days
+            
+    db.commit()
+    db.refresh(req)
+    return req
 
 
 # ─── 3. EXPENSES SCHEMAS & ROUTES ─────────────────────────────────────────────

@@ -1511,6 +1511,193 @@ def get_audit_logs(current_user: models.User = Depends(security.get_current_user
     verify_hr_role(current_user)
     return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).all()
 
+# 10.5 Leave Management (HR)
+
+@router.get("/leaves", response_model=List[LeaveRequestResponse])
+def get_all_leaves(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    return db.query(models.LeaveRequest).order_by(models.LeaveRequest.from_date.desc()).all()
+
+@router.get("/leave-balances", response_model=List[LeaveBalanceResponse])
+def get_all_leave_balances(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    return db.query(models.LeaveBalance).all()
+
+@router.post("/leaves/on-behalf", response_model=LeaveRequestResponse, status_code=status.HTTP_201_CREATED)
+def apply_leave_on_behalf(req: LeaveRequestOnBehalf, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    
+    new_req = models.LeaveRequest(
+        user_id=req.employee_id,
+        leave_type=req.leave_type,
+        from_date=req.from_date,
+        to_date=req.to_date,
+        days=req.days,
+        reason=req.reason,
+        status="hr_approved",
+        tl_approved_at=func.now(),
+        hr_approved_at=func.now()
+    )
+    db.add(new_req)
+    
+    bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == req.employee_id).first()
+    if bal:
+        if req.leave_type == "CL": bal.CL = max(0, bal.CL - req.days)
+        elif req.leave_type == "SL": bal.SL = max(0, bal.SL - req.days)
+        elif req.leave_type == "EL": bal.EL = max(0, bal.EL - req.days)
+        elif req.leave_type == "Maternity": bal.Maternity = max(0, bal.Maternity - req.days)
+        elif req.leave_type == "Paternity": bal.Paternity = max(0, bal.Paternity - req.days)
+        
+    db.add(models.Notification(
+        user_id=req.employee_id,
+        message=f"HR has submitted and approved a {req.leave_type} leave request on your behalf for {req.days} days ({req.from_date} to {req.to_date}).",
+        type="info"
+    ))
+        
+    db.commit()
+    db.refresh(new_req)
+    return new_req
+
+@router.put("/leave-balances/{id}", response_model=LeaveBalanceResponse)
+def update_leave_balance(id: int, req: LeaveBalanceAdjustment, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.id == id).first()
+    if not bal:
+        raise HTTPException(status_code=404, detail="Leave balance not found.")
+        
+    bal.CL = req.CL
+    bal.SL = req.SL
+    bal.EL = req.EL
+    bal.Maternity = req.Maternity
+    bal.Paternity = req.Paternity
+    db.commit()
+    db.refresh(bal)
+    return bal
+
+@router.put("/leaves/{id}", response_model=LeaveRequestResponse)
+def edit_leave_request(id: int, req: LeaveRequestEdit, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    leave_req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == id).first()
+    if not leave_req:
+        raise HTTPException(status_code=404, detail="Leave request not found.")
+        
+    if leave_req.status == "hr_approved":
+        bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == leave_req.user_id).first()
+        if bal:
+            type_changed = leave_req.leave_type != req.leave_type
+            days_diff = req.days - leave_req.days
+            if type_changed:
+                if leave_req.leave_type == "CL": bal.CL += leave_req.days
+                elif leave_req.leave_type == "SL": bal.SL += leave_req.days
+                elif leave_req.leave_type == "EL": bal.EL += leave_req.days
+                elif leave_req.leave_type == "Maternity": bal.Maternity += leave_req.days
+                elif leave_req.leave_type == "Paternity": bal.Paternity += leave_req.days
+                
+                if req.leave_type == "CL": bal.CL = max(0, bal.CL - req.days)
+                elif req.leave_type == "SL": bal.SL = max(0, bal.SL - req.days)
+                elif req.leave_type == "EL": bal.EL = max(0, bal.EL - req.days)
+                elif req.leave_type == "Maternity": bal.Maternity = max(0, bal.Maternity - req.days)
+                elif req.leave_type == "Paternity": bal.Paternity = max(0, bal.Paternity - req.days)
+            else:
+                if leave_req.leave_type == "CL": bal.CL = max(0, bal.CL - days_diff)
+                elif leave_req.leave_type == "SL": bal.SL = max(0, bal.SL - days_diff)
+                elif leave_req.leave_type == "EL": bal.EL = max(0, bal.EL - days_diff)
+                elif leave_req.leave_type == "Maternity": bal.Maternity = max(0, bal.Maternity - days_diff)
+                elif leave_req.leave_type == "Paternity": bal.Paternity = max(0, bal.Paternity - days_diff)
+                
+    leave_req.leave_type = req.leave_type
+    leave_req.from_date = req.from_date
+    leave_req.to_date = req.to_date
+    leave_req.days = req.days
+    leave_req.reason = req.reason
+    
+    db.commit()
+    db.refresh(leave_req)
+    return leave_req
+
+@router.delete("/leaves/{id}")
+def delete_leave_request(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    leave_req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == id).first()
+    if not leave_req:
+        raise HTTPException(status_code=404, detail="Leave request not found.")
+        
+    if leave_req.status == "hr_approved":
+        bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == leave_req.user_id).first()
+        if bal:
+            if leave_req.leave_type == "CL": bal.CL += leave_req.days
+            elif leave_req.leave_type == "SL": bal.SL += leave_req.days
+            elif leave_req.leave_type == "EL": bal.EL += leave_req.days
+            elif leave_req.leave_type == "Maternity": bal.Maternity += leave_req.days
+            elif leave_req.leave_type == "Paternity": bal.Paternity += leave_req.days
+            
+    db.delete(leave_req)
+    db.commit()
+    return {"status": "success", "message": "Leave request deleted successfully."}
+
+class LeaveDenyRequest(BaseModel):
+    reason: str
+
+@router.post("/leaves/{id}/approve", response_model=LeaveRequestResponse)
+def approve_leave_request(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    leave_req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == id).first()
+    if not leave_req:
+        raise HTTPException(status_code=404, detail="Leave request not found.")
+        
+    if leave_req.status == "hr_approved":
+        return leave_req
+        
+    leave_req.status = "hr_approved"
+    leave_req.hr_approved_at = func.now()
+    
+    bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == leave_req.user_id).first()
+    if bal:
+        if leave_req.leave_type == "CL": bal.CL = max(0, bal.CL - leave_req.days)
+        elif leave_req.leave_type == "SL": bal.SL = max(0, bal.SL - leave_req.days)
+        elif leave_req.leave_type == "EL": bal.EL = max(0, bal.EL - leave_req.days)
+        elif leave_req.leave_type == "Maternity": bal.Maternity = max(0, bal.Maternity - leave_req.days)
+        elif leave_req.leave_type == "Paternity": bal.Paternity = max(0, bal.Paternity - leave_req.days)
+        
+    db.add(models.Notification(
+        user_id=leave_req.user_id,
+        message=f"Your {leave_req.leave_type} leave request for {leave_req.days} days ({leave_req.from_date} to {leave_req.to_date}) has been approved by HR.",
+        type="success"
+    ))
+        
+    db.commit()
+    db.refresh(leave_req)
+    return leave_req
+
+@router.post("/leaves/{id}/deny", response_model=LeaveRequestResponse)
+def deny_leave_request(id: int, req: LeaveDenyRequest, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    leave_req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == id).first()
+    if not leave_req:
+        raise HTTPException(status_code=404, detail="Leave request not found.")
+        
+    was_hr_approved = (leave_req.status == "hr_approved")
+    leave_req.status = "denied"
+    
+    if was_hr_approved:
+        bal = db.query(models.LeaveBalance).filter(models.LeaveBalance.user_id == leave_req.user_id).first()
+        if bal:
+            if leave_req.leave_type == "CL": bal.CL += leave_req.days
+            elif leave_req.leave_type == "SL": bal.SL += leave_req.days
+            elif leave_req.leave_type == "EL": bal.EL += leave_req.days
+            elif leave_req.leave_type == "Maternity": bal.Maternity += leave_req.days
+            elif leave_req.leave_type == "Paternity": bal.Paternity += leave_req.days
+            
+    db.add(models.Notification(
+        user_id=leave_req.user_id,
+        message=f"Your {leave_req.leave_type} leave request ({leave_req.from_date} to {leave_req.to_date}) was denied by HR. Reason: {req.reason}",
+        type="danger"
+    ))
+        
+    db.commit()
+    db.refresh(leave_req)
+    return leave_req
+
 
 # 11. Appraisals & Increment Calibration
 DEFAULT_SCORECARDS = [

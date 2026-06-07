@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { notify } from '../../utils/notify';
 
 export function AppraisalsView({ db, onUpdateDb }) {
   const [appraisalTab, setAppraisalTab] = useState('proposals'); // proposals | cycles | scorecards | promotions
@@ -181,7 +182,7 @@ export function AppraisalsView({ db, onUpdateDb }) {
       auditLogs: newLogs
     });
 
-    alert(`Increment proposal of ${incrementPct}% successfully submitted to CEO reviews approvals queue!`);
+    notify(`Increment proposal of ${incrementPct}% submitted to CEO approvals queue.`);
   };
 
   const handleStartDateChange = (val) => {
@@ -245,7 +246,7 @@ export function AppraisalsView({ db, onUpdateDb }) {
     setTlDeadline('');
     setCycleStatus('active');
     setIsCreateCycleOpen(false);
-    alert(`Performance Review Cycle ${cycleName} successfully launched globally!`);
+    notify(`Performance review cycle "${cycleName}" launched globally.`);
   };
 
   const handleProposePromotion = async (e) => {
@@ -265,13 +266,13 @@ export function AppraisalsView({ db, onUpdateDb }) {
         setPromoCurrentTitle('');
         setPromoProposedTitle('');
         setIsProposePromoOpen(false);
-        alert(`Promotion proposed for ${saved.name}! CEO has been notified for approval.`);
+        notify(`Promotion proposed for ${saved.name}. CEO notified for approval.`);
       } else {
-        alert('Failed to submit promotion proposal.');
+        notify('Failed to submit promotion proposal.', 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Network error submitting promotion.');
+      notify('Network error submitting promotion.', 'error');
     }
   };
 
@@ -482,13 +483,13 @@ export function AppraisalsView({ db, onUpdateDb }) {
                           });
                           if (res.ok) {
                             const data = await res.json();
-                            alert(data.message);
+                            notify(data.message);
                           } else {
-                            alert('Failed to acknowledge scorecard.');
+                            notify('Failed to acknowledge scorecard.', 'error');
                           }
                         } catch (err) {
                           console.error(err);
-                          alert(`TL [${sc.tl_name}] notified! Calibrations scorecard audit requested.`);
+                          notify('Network error acknowledging scorecard. Please try again.', 'error');
                         }
                       }}
                     >

@@ -1,7 +1,26 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar } from 'lucide-react';
 
-export function LeaveManagementView({ db, onUpdateDb }) {
+export function LeaveManagementView() {
+  const [employees, setEmployees] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveBalances, setLeaveBalances] = useState([]);
+
+  const fetchData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const empRes = await fetch('/api/hr-portal/employees', { headers });
+      if(empRes.ok) setEmployees(await empRes.json());
+      const reqRes = await fetch('/api/hr-portal/leaves', { headers });
+      if(reqRes.ok) setLeaveRequests(await reqRes.json());
+      const balRes = await fetch('/api/hr-portal/leave-balances', { headers });
+      if(balRes.ok) setLeaveBalances(await balRes.json());
+    } catch(e) { console.error(e); }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
   const [isRequestOpen, setIsRequestOpen] = useState(false);
   const [denyingId, setDenyingId] = useState(null);
   const [denyComment, setDenyComment] = useState('');
@@ -19,286 +38,127 @@ export function LeaveManagementView({ db, onUpdateDb }) {
   const [editingRequest, setEditingRequest] = useState(null);
   const [requestFilter, setRequestFilter] = useState('pending'); // pending | approved | denied | all
 
-  const handleApplyOnBehalf = (e) => {
+  const handleApplyOnBehalf = async (e) => {
     e.preventDefault();
-    if (!behalfEmpId) {
-      alert('Please select an employee.');
-      return;
-    }
-
+    if (!behalfEmpId) return alert('Please select an employee.');
     const empId = Number(behalfEmpId);
-    const emp = db.employees.find(e => e.id === empId);
-    if (!emp) return;
-
     const daysCount = parseFloat(behalfDays) || 0;
-    if (daysCount <= 0) {
-      alert('Please specify a positive number of days.');
-      return;
-    }
-
-    // Check balance first
-    const balance = db.leaveBalances.find(b => b.employee_id === empId);
-    if (balance && balance[behalfType] < daysCount) {
-      if (!window.confirm(`Warning: Employee only has ${balance[behalfType]} days of ${behalfType} remaining. Proceeding will result in a negative balance. Do you want to continue?`)) {
-        return;
-      }
-    }
-
-    const newRequest = {
-      id: +new Date(),
-      employee_id: empId,
-      leave_type: behalfType,
-      from_date: behalfFrom,
-      to_date: behalfTo,
-      days: daysCount,
-      reason: behalfReason,
-      status: 'hr_approved',
-      tl_approved_at: new Date().toISOString(),
-      hr_approved_at: new Date().toISOString()
-    };
-
-    // Deduct balance
-    const updatedBalances = db.leaveBalances.map(b => {
-      if (b.employee_id === empId) {
-        return {
-          ...b,
-          [behalfType]: Math.max(0, b[behalfType] - daysCount)
-        };
-      }
-      return b;
-    });
-
-    const newNotification = {
-      id: +new Date() + 1,
-      employee_id: empId,
-      message: `HR has submitted and approved a ${behalfType} leave request on your behalf for ${daysCount} days (${behalfFrom} to ${behalfTo}).`,
-      timestamp: new Date().toISOString(),
-      type: 'info',
-      read: false
-    };
-
-    const updatedNotifications = db.notifications ? [...db.notifications, newNotification] : [newNotification];
-
-    onUpdateDb({
-      ...db,
-      leaveRequests: [...(db.leaveRequests || []), newRequest],
-      leaveBalances: updatedBalances,
-      notifications: updatedNotifications
-    });
-
-    setIsApplyOnBehalfOpen(false);
-    setBehalfEmpId('');
-    setBehalfType('CL');
-    setBehalfFrom('');
-    setBehalfTo('');
-    setBehalfDays('');
-    setBehalfReason('');
-
-    alert(`Successfully applied and approved leave for ${emp.name}.`);
+    if (daysCount <= 0) return alert('Please specify a positive number of days.');
+    
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/hr-portal/leaves/on-behalf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          employee_id: empId,
+          leave_type: behalfType,
+          from_date: behalfFrom,
+          to_date: behalfTo,
+          days: daysCount,
+          reason: behalfReason
+        })
+      });
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      setIsApplyOnBehalfOpen(false);
+      setBehalfEmpId(''); setBehalfType('CL'); setBehalfFrom(''); setBehalfTo(''); setBehalfDays(''); setBehalfReason('');
+      alert('Successfully applied and approved leave.');
+    } catch(e) { console.error(e); alert('Error'); }
   };
 
-  const handleSaveBalanceAdjustment = (e) => {
+  const handleSaveBalanceAdjustment = async (e) => {
     e.preventDefault();
     if (!editingBalance) return;
-
-    const updatedBalances = db.leaveBalances.map(b => {
-      if (b.id === editingBalance.id) {
-        return {
-          ...b,
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/hr-portal/leave-balances/${editingBalance.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
           CL: parseFloat(editingBalance.CL) || 0,
           SL: parseFloat(editingBalance.SL) || 0,
           EL: parseFloat(editingBalance.EL) || 0,
           Maternity: parseFloat(editingBalance.Maternity) || 0,
           Paternity: parseFloat(editingBalance.Paternity) || 0
-        };
-      }
-      return b;
-    });
-
-    onUpdateDb({
-      ...db,
-      leaveBalances: updatedBalances
-    });
-
-    setEditingBalance(null);
-    alert('Leave balances successfully adjusted.');
+        })
+      });
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      setEditingBalance(null);
+      alert('Leave balances successfully adjusted.');
+    } catch(e) { console.error(e); alert('Error'); }
   };
 
-  const handleSaveRequestEdit = (e) => {
+  const handleSaveRequestEdit = async (e) => {
     e.preventDefault();
     if (!editingRequest) return;
-
-    const originalReq = db.leaveRequests.find(r => r.id === editingRequest.id);
-    if (!originalReq) return;
-
-    // Calculate balance difference if it was approved
-    let updatedBalances = db.leaveBalances;
-    if (originalReq.status === 'hr_approved') {
-      const typeChanged = originalReq.leave_type !== editingRequest.leave_type;
-      const daysDiff = editingRequest.days - originalReq.days;
-
-      updatedBalances = db.leaveBalances.map(b => {
-        if (b.employee_id === originalReq.employee_id) {
-          if (typeChanged) {
-            return {
-              ...b,
-              [originalReq.leave_type]: b[originalReq.leave_type] + originalReq.days,
-              [editingRequest.leave_type]: Math.max(0, b[editingRequest.leave_type] - editingRequest.days)
-            };
-          } else {
-            return {
-              ...b,
-              [originalReq.leave_type]: Math.max(0, b[originalReq.leave_type] - daysDiff)
-            };
-          }
-        }
-        return b;
-      });
-    }
-
-    const updatedRequests = db.leaveRequests.map(r => {
-      if (r.id === editingRequest.id) {
-        return {
-          ...r,
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/hr-portal/leaves/${editingRequest.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
           leave_type: editingRequest.leave_type,
           from_date: editingRequest.from_date,
           to_date: editingRequest.to_date,
           days: parseFloat(editingRequest.days) || 0,
           reason: editingRequest.reason
-        };
-      }
-      return r;
-    });
-
-    onUpdateDb({
-      ...db,
-      leaveRequests: updatedRequests,
-      leaveBalances: updatedBalances
-    });
-
-    setEditingRequest(null);
-    alert('Leave request successfully updated.');
-  };
-
-  const handleDeleteLeaveRequest = (id) => {
-    const req = db.leaveRequests.find(r => r.id === id);
-    if (!req) return;
-
-    if (!window.confirm(`Are you sure you want to void and delete this ${req.leave_type} request for ${req.days} days?`)) {
-      return;
-    }
-
-    let updatedBalances = db.leaveBalances;
-    if (req.status === 'hr_approved') {
-      updatedBalances = db.leaveBalances.map(b => {
-        if (b.employee_id === req.employee_id) {
-          return {
-            ...b,
-            [req.leave_type]: b[req.leave_type] + req.days
-          };
-        }
-        return b;
+        })
       });
-    }
-
-    const updatedRequests = db.leaveRequests.filter(r => r.id !== id);
-
-    onUpdateDb({
-      ...db,
-      leaveRequests: updatedRequests,
-      leaveBalances: updatedBalances
-    });
-
-    alert('Leave request deleted successfully.' + (req.status === 'hr_approved' ? ' Leave balances have been restored.' : ''));
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      setEditingRequest(null);
+      alert('Leave request successfully updated.');
+    } catch(e) { console.error(e); alert('Error'); }
   };
 
-  const handleApproveLeave = (id) => {
-    const req = db.leaveRequests.find(r => r.id === id);
-    if (!req) return;
-
-    const emp = db.employees.find(e => e.id === req.employee_id) || { name: 'Employee' };
-
-    const updatedRequests = db.leaveRequests.map(r => {
-      if (r.id === id) {
-        return { ...r, status: 'hr_approved', hr_approved_at: new Date().toISOString() };
-      }
-      return r;
-    });
-
-    const updatedBalances = db.leaveBalances.map(b => {
-      if (b.employee_id === req.employee_id) {
-        const type = req.leave_type;
-        return {
-          ...b,
-          [type]: Math.max(0, b[type] - req.days)
-        };
-      }
-      return b;
-    });
-
-    const newNotification = {
-      id: +new Date(),
-      employee_id: req.employee_id,
-      message: `Your ${req.leave_type} leave request for ${req.days} days (${req.from_date} to ${req.to_date}) has been approved by HR.`,
-      timestamp: new Date().toISOString(),
-      type: 'success',
-      read: false
-    };
-
-    const updatedNotifications = db.notifications ? [...db.notifications, newNotification] : [newNotification];
-
-    onUpdateDb({
-      ...db,
-      leaveRequests: updatedRequests,
-      leaveBalances: updatedBalances,
-      notifications: updatedNotifications
-    });
-
-    alert(`Leave request approved!\n\nMessage sent to ${emp.name}: "Your ${req.leave_type} leave request has been approved by HR."`);
+  const handleDeleteLeaveRequest = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this request?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/hr-portal/leaves/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      alert('Leave request deleted successfully.');
+    } catch(e) { console.error(e); alert('Error'); }
   };
 
-  const handleDenyLeave = (id) => {
-    if (!denyComment.trim()) {
-      alert('Please specify a reason for denying this leave request.');
-      return;
-    }
-    const req = db.leaveRequests.find(r => r.id === id);
-    if (!req) return;
-
-    const emp = db.employees.find(e => e.id === req.employee_id) || { name: 'Employee' };
-
-    const updatedRequests = db.leaveRequests.map(r => {
-      if (r.id === id) {
-        return { ...r, status: 'denied', hr_denied_at: new Date().toISOString(), denial_reason: denyComment };
-      }
-      return r;
-    });
-
-    const newNotification = {
-      id: +new Date(),
-      employee_id: req.employee_id,
-      message: `Your ${req.leave_type} leave request (${req.from_date} to ${req.to_date}) was denied by HR. Reason: ${denyComment}`,
-      timestamp: new Date().toISOString(),
-      type: 'danger',
-      read: false
-    };
-
-    const updatedNotifications = db.notifications ? [...db.notifications, newNotification] : [newNotification];
-
-    onUpdateDb({
-      ...db,
-      leaveRequests: updatedRequests,
-      notifications: updatedNotifications
-    });
-
-    alert(`Leave request denied.\n\nDenial comment dispatched to ${emp.name}: "Your leave request was denied. Reason: ${denyComment}"`);
-    
-    setDenyingId(null);
-    setDenyComment('');
+  const handleApproveLeave = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/hr-portal/leaves/${id}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      alert('Leave request approved!');
+    } catch(e) { console.error(e); alert('Error'); }
   };
 
-  const pendingRequests = db.leaveRequests.filter(r => r.status === 'tl_approved' || r.status === 'pending');
-  const displayedRequests = db.leaveRequests.filter(r => {
+  const handleDenyLeave = async (id) => {
+    if (!denyComment.trim()) return alert('Please specify a reason for denying this leave request.');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/hr-portal/leaves/${id}/deny`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ reason: denyComment })
+      });
+      if(!res.ok) throw new Error("Failed");
+      await fetchData();
+      alert('Leave request denied.');
+      setDenyingId(null);
+      setDenyComment('');
+    } catch(e) { console.error(e); alert('Error'); }
+  };
+
+  const pendingRequests = leaveRequests.filter(r => r.status === 'tl_approved' || r.status === 'pending');
+  const displayedRequests = leaveRequests.filter(r => {
     if (requestFilter === 'pending') return r.status === 'tl_approved' || r.status === 'pending';
     if (requestFilter === 'approved') return r.status === 'hr_approved';
     if (requestFilter === 'denied') return r.status === 'denied';
@@ -388,8 +248,8 @@ export function LeaveManagementView({ db, onUpdateDb }) {
               </tr>
             </thead>
             <tbody>
-              {db.leaveBalances.map(b => {
-                const emp = db.employees.find(e => e.id === b.employee_id) || { name: 'Unknown' };
+              {leaveBalances.map(b => {
+                const emp = employees.find(e => e.id === b.employee_id) || { name: 'Unknown' };
                 return (
                   <tr key={b.id}>
                     <td style={{ padding: '16px 40px' }}><strong>{emp.name}</strong></td>
@@ -449,7 +309,7 @@ export function LeaveManagementView({ db, onUpdateDb }) {
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px', outline: 'none' }}
                 >
                   <option value="">-- Choose Staff member --</option>
-                  {db.employees.map(emp => (
+                  {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name} ({emp.emp_id} - {emp.department})</option>
                   ))}
                 </select>
@@ -535,7 +395,7 @@ export function LeaveManagementView({ db, onUpdateDb }) {
 
       {/* ✏️ EDIT LEAVE BALANCES MODAL */}
       {editingBalance && (() => {
-        const emp = db.employees.find(e => e.id === editingBalance.employee_id) || { name: 'Employee' };
+        const emp = employees.find(e => e.id === editingBalance.employee_id) || { name: 'Employee' };
         return (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
             <form 
@@ -764,7 +624,7 @@ export function LeaveManagementView({ db, onUpdateDb }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {displayedRequests.map(r => {
-                const emp = db.employees.find(e => e.id === r.employee_id) || { name: 'Unknown', designation: 'Employee' };
+                const emp = employees.find(e => e.id === r.employee_id) || { name: 'Unknown', designation: 'Employee' };
                 return (
                   <div key={r.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '16px', gap: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

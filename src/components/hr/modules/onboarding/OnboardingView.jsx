@@ -1,12 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trash2, Edit } from 'lucide-react';
+import { notify } from '../../utils/notify';
 
 export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) {
+  useEffect(() => {
+    const syncOnboardingData = async () => {
+      const token = localStorage.getItem('nsg_jwt_token');
+      if (!token || !db) return;
+
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const [tasksRes, esignRes, empRes] = await Promise.all([
+          fetch('/api/hr-portal/onboarding/tasks', { headers }),
+          fetch('/api/hr-portal/onboarding/esign-requests', { headers }),
+          fetch('/api/hr-portal/employees', { headers }),
+        ]);
+
+        const updates = { ...db };
+        if (tasksRes.ok) updates.onboardingTasks = await tasksRes.json();
+        if (esignRes.ok) updates.esignRequests = await esignRes.json();
+        if (empRes.ok) updates.employees = await empRes.json();
+
+        if (tasksRes.ok || esignRes.ok || empRes.ok) {
+          onUpdateDb(updates);
+        }
+      } catch (err) {
+        console.error('Failed to sync onboarding data:', err);
+      }
+    };
+
+    syncOnboardingData();
+  }, []);
   const onboardingTab = queryParams?.get('subTab') || 'active';
   const setOnboardingTab = (val) => setQueryParams({ subTab: val });
 
   const empIdStr = queryParams?.get('empId');
-  const selectedInstance = empIdStr ? db.employees.find(e => String(e.id) === empIdStr) : null;
+  const selectedInstance = empIdStr ? (db?.employees || []).find(e => String(e.id) === empIdStr) : null;
   const setSelectedInstance = (emp) => {
     setQueryParams({ empId: emp ? String(emp.id) : '' });
   };
@@ -122,7 +151,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
     }
   }, [db, onUpdateDb]);
 
-  const activeProbationers = db.employees.filter(e => e.status === 'probation');
+  const activeProbationers = (db?.employees || []).filter(e => e.status === 'probation');
   const onboardingTasks = db.onboardingTasks || [
     { id: 1, instance_id: 104, task_name: 'Workstation Setup & Laptop Provisioning', assigned_to: 'IT', due_date: '2026-04-17', is_mandatory: true, requires_esign: false, completed_at: '2026-04-16', status: 'completed' },
     { id: 2, instance_id: 104, task_name: 'Provision System Logins & Email', assigned_to: 'IT', due_date: '2026-04-16', is_mandatory: true, requires_esign: false, completed_at: '2026-04-16', status: 'completed' },
@@ -207,7 +236,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
     });
 
     setTaskName('');
-    alert('Task successfully enqueued to onboarding template flow builder.');
+    notify('Task successfully enqueued to onboarding template flow builder.');
   };
 
   const handleDeleteTemplateTask = (taskName) => {
@@ -251,7 +280,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
       onboardingTasks: updatedTasks
     });
 
-    alert('Simulation: Employee e-signed document via OTP secure portal. Onboarding task updated.');
+    notify('Employee e-signed document via OTP secure portal. Onboarding task updated.');
   };
 
   const handleSendEsignRequest = (emp) => {
@@ -269,11 +298,11 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
       esignRequests: [...esignRequests, newRequest]
     });
 
-    alert(`E-signature request for NDA Policy dispatched to ${emp.name} email queue.`);
+    notify(`E-signature request for NDA Policy dispatched to ${emp.name} email queue.`, 'info');
   };
 
   const handleSendOverdueReminder = (task) => {
-    alert(`Slack & Email alert triggered to Assignee: [${task.assigned_to}] for task: [${task.task_name}]`);
+    notify(`Alert sent to ${task.assigned_to} for: ${task.task_name}`, 'info');
   };
 
   const handleDeleteEsign = (requestId) => {
@@ -353,7 +382,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
       esignRequests: demoEsigns,
       trainingProgress: [...(db.trainingProgress || []).filter(p => !demoProgress.some(dp => dp.employee_id === p.employee_id)), ...demoProgress]
     });
-    alert('Onboarding data successfully re-seeded with realistic active, overdue, and completed statuses!');
+    notify('Onboarding demo data re-seeded with active, overdue, and completed statuses.', 'info');
   };
 
   // Pre-calculate overdue tasks
@@ -643,7 +672,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
                           <button
                             className="print-btn"
                             style={{ padding: '4px 8px', fontSize: '10px' }}
-                            onClick={() => alert(`Resent NDA document signature request to ${emp.name}`)}
+                            onClick={() => notify(`Resent NDA document signature request to ${emp.name}`, 'info')}
                           >
                             Resend Link
                           </button>
@@ -849,7 +878,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
                   style={{ backgroundColor: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
                   onClick={() => {
                     handleToggleTask(allocatingAsset.id);
-                    alert(`IT Equipment Allocated Successfully!\n\nSystem: ${laptopModel}\nSerial: ${serialNumber}\nScreen: ${allocatedMonitors}\n\nLDAP logins and security policies provisioned and sent to IT logistics.`);
+                    notify(`IT equipment allocated: ${laptopModel} (${serialNumber}). LDAP provisioned.`, 'success');
                     setAllocatingAsset(null);
                   }}
                 >
@@ -935,7 +964,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
                             setOtpVerified(true);
                             setTypedSignature(emp.name);
                           } else {
-                            alert('Invalid validation OTP code! Please type "9432" to simulate.');
+                            notify('Invalid OTP code. Use 9432 for demo signing.', 'warning');
                           }
                         }}
                       >
@@ -1131,7 +1160,7 @@ export function OnboardingView({ db, onUpdateDb, queryParams, setQueryParams }) 
               });
 
               setEditingEsign(null);
-              alert('E-Sign request and onboarding status synchronized successfully.');
+              notify('E-Sign request and onboarding status synchronized successfully.');
             }} 
             className="card" 
             style={{ width: '460px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid var(--accent-blue)' }}
