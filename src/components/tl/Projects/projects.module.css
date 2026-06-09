@@ -27,7 +27,7 @@
 .headerTitle {
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -82,7 +82,7 @@
 
 .navTab:hover {
   background: #f1f5f9;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .navTab.activeTab {
@@ -161,7 +161,7 @@
   background: transparent;
   outline: none;
   font-size: 13px;
-  color: var(--text-main);
+  color: var(--text-primary);
   width: 200px;
 }
 
@@ -175,7 +175,7 @@
 }
 
 .selectionPrompt h3 {
-  color: var(--text-main);
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 600;
   margin: 0;
@@ -217,7 +217,7 @@
   flex: 1;
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -280,7 +280,7 @@
 .pTitle {
   font-size: 18px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -311,7 +311,7 @@
 }
 
 .pProgressText strong {
-  color: var(--text-main);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -378,7 +378,7 @@
 .sectionTitle {
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin-bottom: 20px;
 }
 
@@ -403,7 +403,7 @@
 .formGroup label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .formGroup input, .formGroup textarea, .formGroup select {
@@ -414,7 +414,7 @@
   outline: none;
   font-family: inherit;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   transition: border 0.2s;
 }
 
@@ -508,7 +508,7 @@
 .bItemTitle {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .dragIcon {
@@ -537,7 +537,7 @@
   background: transparent;
   border: none;
   font-size: 13px;
-  color: var(--text-main);
+  color: var(--text-primary);
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -610,7 +610,7 @@
 }
 
 .modalBody strong {
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .bItemMeta {
@@ -686,7 +686,7 @@
 .kanbanColHeader h4 {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0;
@@ -700,7 +700,7 @@
 
 .kanbanCount {
   background: #e2e8f0;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
@@ -744,7 +744,7 @@
 .kTaskTitle {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
   line-height: 1.4;
   margin: 0;
   flex: 1;
@@ -1155,7 +1155,7 @@
   gap: 12px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .milestoneIcon {
@@ -1190,7 +1190,7 @@
 .tlColTasks {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .tlColProgress {

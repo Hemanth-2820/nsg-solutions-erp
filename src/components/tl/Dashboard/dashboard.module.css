@@ -37,7 +37,7 @@
 .widgetTitle {
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -90,7 +90,7 @@
 .workloadName {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -179,7 +179,7 @@
   width: 40px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
   text-align: right;
 }
 
@@ -236,7 +236,7 @@
 
 .avatarName {
   font-size: 11px;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-weight: 500;
   text-align: center;
   white-space: nowrap;
@@ -299,7 +299,7 @@
 .progressPoints {
   font-size: 24px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .progressLabel {
@@ -328,7 +328,7 @@
 .sprintName {
   font-size: 18px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -359,7 +359,7 @@
 .taskCountNum {
   font-size: 20px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .taskCountLabel {
@@ -414,14 +414,14 @@
 
 .backBtn:hover {
   background: var(--bg-card);
-  color: var(--text-main);
+  color: var(--text-primary);
   border-color: #cbd5e1;
 }
 
 .pageTitle {
   font-size: 24px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -459,7 +459,7 @@
 .pageListItemName {
   font-weight: 600;
   font-size: 16px;
-  color: var(--text-main);
+  color: var(--text-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -490,7 +490,7 @@
   border-radius: 8px;
   border-left: 3px solid var(--primary);
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
@@ -536,7 +536,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
-  color: var(--text-main);
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 14px;
   resize: vertical;
@@ -570,7 +570,7 @@
 .badgeLabel {
   font-weight: 600;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .badgeCount {
@@ -676,7 +676,7 @@
 .confirmTitle {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 

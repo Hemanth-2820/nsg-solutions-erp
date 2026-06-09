@@ -83,6 +83,7 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
   const [huddlePeer, setHuddlePeer] = useState(null);
 
   const [dbChannels, setDbChannels] = useState([]);
+  const [localDmMessages, setLocalDmMessages] = useState({});
   const [tickets, setTickets] = useState([]);
   const socketRef = useRef(null);
 
@@ -138,12 +139,14 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
             });
             if (msgRes.ok) {
               const msgs = await msgRes.json();
+              const existingLocalChannel = (db?.chatChannels || []).find(ec => ec.id === c.id);
+              const localMembers = existingLocalChannel?.members;
               return {
                 id: c.id,
                 name: c.name,
                 label: c.label,
                 type: c.type,
-                members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
+                members: localMembers || (c.members && c.members.length > 0 ? c.members : (c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'])),
                 messages: msgs.map(m => ({
                   id: m.id,
                   sender: (m.sender === hrName || m.sender === hrName + ' (HR)' || m.sender === 'Sarah Jenkins' || m.sender === 'Sarah Jenkins (HR)' || m.sender === 'Sophia Reed' || m.sender === 'Sophia Reed (HR)') ? 'You' : m.sender,
@@ -160,18 +163,20 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
           } catch (e) {
             console.error("Error loading messages for channel", c.id, e);
           }
+          const existingLocalChannel2 = (db?.chatChannels || []).find(ec => ec.id === c.id);
+          const localMembers2 = existingLocalChannel2?.members;
           return {
             id: c.id,
             name: c.name,
             label: c.label,
             type: c.type,
-            members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
+            members: localMembers2 || (c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo']),
             messages: []
           };
         }));
         setDbChannels(loadedChannels);
         if (onUpdateDb) {
-          onUpdateDb({
+          setDbChannels(loadedChannels); onUpdateDb({
             ...db,
             chatChannels: loadedChannels
           });
@@ -186,6 +191,9 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
     fetchChannelsAndMessages();
     fetchTickets();
   }, []);
+
+  // ── Channel Configuration (Derived dynamically from DB) ──────────────────────
+  const chatChannels = dbChannels.length > 0 ? dbChannels : (db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS);
 
   // Initialize WebSocket connection for real-time messaging
   useEffect(() => {
@@ -217,7 +225,6 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
   }, [db, onUpdateDb, chatChannels]);
 
   // ── Channel Configuration (Derived dynamically from DB) ──────────────────────
-  const chatChannels = dbChannels.length > 0 ? dbChannels : (db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS);
 
   const derivedChannels = {
     management: chatChannels.filter(c => c.type === 'management'),
@@ -329,17 +336,26 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       edited: false
     };
 
-    const updatedChannels = chatChannels.map(c => {
-      if (c.id === selectedChannel) {
-        return {
-          ...c,
-          messages: [...(c.messages || []), msg]
-        };
-      }
-      return c;
-    });
+    const isCorporateChannel = chatChannels.some(c => c.id === selectedChannel);
 
-    onUpdateDb({ ...db, chatChannels: updatedChannels });
+    if (isCorporateChannel) {
+      const updatedChannels = chatChannels.map(c => {
+        if (c.id === selectedChannel) {
+          return {
+            ...c,
+            messages: [...(c.messages || []), msg]
+          };
+        }
+        return c;
+      });
+
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
+    } else {
+      setLocalDmMessages(prev => ({
+        ...prev,
+        [selectedChannel]: [...(prev[selectedChannel] || []), msg]
+      }));
+    }
     setNewMsg(''); setMentionedMember(null); setIsPrivate(false);
     setShowMentionDropdown(false); setReplyTo(null);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
@@ -356,7 +372,7 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       }
       return c;
     });
-    onUpdateDb({ ...db, chatChannels: updatedChannels });
+    setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
   };
 
   const handleDelete = (id) => {
@@ -369,7 +385,7 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       }
       return c;
     });
-    onUpdateDb({ ...db, chatChannels: updatedChannels });
+    setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     setOpenMenuId(null);
   };
 
@@ -408,14 +424,14 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       }
       return c;
     });
-    onUpdateDb({ ...db, chatChannels: updatedChannels });
+    setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     setForwardMsg(null);
   };
 
   const handleSave = (id, saved) => { updateMsg(id, { saved: !saved }); setOpenMenuId(null); };
 
   // ── Roster & Channel Creation Handlers ───────────────────────────────────────
-  const handleCreateChannel = (e) => {
+  const handleCreateChannel = async (e) => {
     e.preventDefault();
     if (!newChannelName.trim()) return;
     if (!onUpdateDb) {
@@ -429,12 +445,15 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
     const baseId = rawName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'channel';
     const newId = `${baseId}-${Date.now()}`;
     
+    const channelMembers = selectedRosterMembers.length > 0 ? selectedRosterMembers : ['hr'];
+    if (!channelMembers.includes('hr')) channelMembers.push('hr');
+
     const newChan = {
       id: newId,
       name: formattedName,
       label: newChannelLabel.trim() || `${rawName} Channel`,
       type: newChannelType,
-      members: selectedRosterMembers.length > 0 ? selectedRosterMembers : ['hr'],
+      members: channelMembers,
       messages: [
         {
           id: Date.now(),
@@ -445,9 +464,29 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       ]
     };
     
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      await fetch('/api/employee-portal/chat/channels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: newChan.id,
+          name: newChan.name,
+          label: newChan.label,
+          type: newChan.type,
+          members: newChan.members
+        })
+      });
+    } catch (err) {
+      console.error("Failed to save channel to backend:", err);
+    }
+
     const currentChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
     const updated = [...currentChannels, newChan];
-    onUpdateDb({ ...db, chatChannels: updated });
+    setDbChannels(updated); onUpdateDb({ ...db, chatChannels: updated });
     
     setNewChannelName('');
     setNewChannelLabel('');
@@ -457,7 +496,7 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
     setSelectedChannel(newId);
   };
 
-  const handleToggleMember = (memberId) => {
+  const handleToggleMember = async (memberId) => {
     if (!currentChannel) return;
     const membersList = currentChannel.members || [];
     let updatedMembers;
@@ -467,25 +506,76 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
       updatedMembers = [...membersList, memberId];
     }
     
+    // Update local state immediately for instant UI feedback
     const updatedChannels = chatChannels.map(c => {
       if (c.id === selectedChannel) {
-        return {
-          ...c,
-          members: updatedMembers
-        };
+        return { ...c, members: updatedMembers };
       }
       return c;
     });
-    
-    onUpdateDb({ ...db, chatChannels: updatedChannels });
+    setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
+
+    // CRITICAL: Also save to backend SQLite database so Employee portal can read it.
+    // The Employee portal uses current_user.id (backend integer ID) to filter channels.
+    // We need to convert frontend memberId to backend User IDs.
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      // Fetch all backend users to resolve names/roles to backend IDs
+      // Use the employees endpoint, and also rely on known special roles
+      const usersRes = await fetch('/api/hr-portal/employees', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let backendUsers = [];
+      if (usersRes.ok) {
+        backendUsers = await usersRes.json();
+      }
+
+      // Map updated members (frontend IDs like "102", "hr", "ceo") to backend User IDs
+      const backendUserIds = updatedMembers.map(mId => {
+        if (mId === 'hr') {
+          // HR manager: find by role in backend users, or use known email
+          const hrUser = backendUsers.find(u => u.role === 'hr') || { id: 2 }; // ID=2 is HR
+          return String(hrUser.id);
+        }
+        if (mId === 'ceo') {
+          const ceoUser = backendUsers.find(u => u.role === 'ceo') || { id: 1 }; // ID=1 is CEO
+          return String(ceoUser.id);
+        }
+        // For numeric IDs: match frontend emp.id to backend user by name/email
+        // The frontend db.employees has IDs 101-106, backend has IDs 1-9
+        const frontendEmp = (db?.employees || []).find(e => String(e.id) === mId);
+        if (frontendEmp) {
+          const backendUser = backendUsers.find(u => u.name === frontendEmp.name || u.email === frontendEmp.email);
+          return backendUser ? String(backendUser.id) : null;
+        }
+        return null;
+      }).filter(Boolean);
+
+      // Save the backend user ID list to SQLite via PUT API
+      await fetch(`/api/employee-portal/chat/channels/${selectedChannel}/members`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ members: backendUserIds })
+      });
+    } catch (e) {
+      console.error('Failed to save channel members to backend:', e);
+    }
   };
 
   // ── Visible messages (private filter) ────────────────────────────────────────
   const visibleMessages = currentChannel ? (currentChannel.messages || []).filter(m =>
     m.isPrivate ? m.sender === 'You' || m.mention === 'Sarah Jenkins' : true
-  ) : [];
+  ) : (localDmMessages[selectedChannel] || []);
 
   const isStaffChannel = currentChannel ? (currentChannel.type === 'staff') : false;
+
+  const isDM = selectedChannel.startsWith('dm-');
+  const dmEmployee = isDM ? (db?.employees || []).find(e => `dm-${e.id}` === selectedChannel) : null;
+  const currentMembersCount = isDM ? 2 : (getChannelMembers(selectedChannel).length || 1);
+  const currentChannelName = isDM ? dmEmployee?.name : currentChannel?.name;
 
   // ── Context Menu Item ─────────────────────────────────────────────────────────
   const MenuItem = ({ icon, label, onClick, danger }) => (
@@ -569,6 +659,25 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
               </div>
             </div>
           </div>
+          {/* Direct Messages */}
+          <div>
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', marginBottom: '8px', letterSpacing: '0.5px', marginTop: '12px' }}>💬 Direct Messages</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {(db?.employees || []).filter(e => e.id !== 'hr').map(emp => {
+                const dmId = `dm-${emp.id}`;
+                return (
+                  <div key={dmId} onClick={() => setSelectedChannel(dmId)}
+                    style={{ padding: '6px 12px', backgroundColor: selectedChannel === dmId ? 'rgba(236,72,153,0.08)' : 'transparent', color: selectedChannel === dmId ? 'var(--accent-pink)' : 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: selectedChannel === dmId ? '600' : 'normal', border: selectedChannel === dmId ? '1px solid rgba(236,72,153,0.2)' : '1px solid transparent', transition: 'all 0.15s' }}>
+                    <div style={{ position: 'relative' }}>
+                      <img src={emp.avatar || `https://ui-avatars.com/api/?name=${emp.name}`} alt={emp.name} style={{ width: '20px', height: '20px', borderRadius: '10px' }} />
+                    </div>
+                    {emp.name}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold', display: 'block', letterSpacing: '0.5px' }}>🎥 Actions</span>
             <div
@@ -662,8 +771,8 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
             <>
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <strong style={{ fontSize: '15px' }}>{currentChannel?.name}</strong>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>({currentChannel?.members?.length || 0} members)</span>
+              <strong style={{ fontSize: '15px' }}>{currentChannelName}</strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>({currentMembersCount} members)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {selectedChannel !== 'support-tickets' && (
@@ -697,8 +806,8 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
                     type="button"
                     onClick={() => {
                       setHuddlePeer({
-                        name: 'HR / Management',
-                        roomName: currentChannel?.name || 'HR Portal Conference',
+                        name: currentChannelName || 'HR / Management',
+                        roomName: currentChannelName || 'HR Portal Conference',
                         channelId: selectedChannel
                       });
                     }}
@@ -789,7 +898,7 @@ export function HrMessagingView({ db, onUpdateDb, currentUser }) {
                       <button type="button" onClick={() => setEditingMsgId(null)} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={13} /></button>
                     </div>
                   ) : (
-                    <div style={{ padding: '9px 13px', backgroundColor: isOwn ? (m.isPrivate ? '#7c3aed' : 'var(--accent-pink)') : 'var(--bg-tertiary)', borderRadius: isOwn ? '12px 12px 3px 12px' : '12px 12px 12px 3px', color: '#fff', fontSize: '13px', border: isOwn ? 'none' : '1px solid var(--border-color)', lineHeight: '1.5', boxShadow: m.saved ? '0 0 0 1.5px #fbbf24' : 'none' }}>
+                    <div style={{ padding: '9px 13px', backgroundColor: isOwn ? (m.isPrivate ? '#7c3aed' : 'var(--accent-pink)') : 'var(--bg-tertiary)', borderRadius: isOwn ? '12px 12px 3px 12px' : '12px 12px 12px 3px', color: isOwn ? '#fff' : 'var(--text-primary)', fontSize: '13px', border: isOwn ? 'none' : '1px solid var(--border-color)', lineHeight: '1.5', boxShadow: m.saved ? '0 0 0 1.5px #fbbf24' : 'none' }}>
                       {m.mention && <span style={{ color: m.isPrivate ? '#c4b5fd' : '#fde68a', fontWeight: 'bold', marginRight: '4px' }}>@{m.mention}</span>}
                       {m.text.replace(`@${m.mention} `, '')}
                     </div>

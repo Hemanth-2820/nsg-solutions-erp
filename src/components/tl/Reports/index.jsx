@@ -215,7 +215,7 @@ const Reports = () => {
                     )}
                   </svg>
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>{donutData.completed}%</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{donutData.completed}%</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Completed</div>
                   </div>
                 </div>

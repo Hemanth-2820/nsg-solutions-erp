@@ -130,6 +130,16 @@ body {
   flex-direction: column;
   gap: 24px;
   flex: 1;
+  overflow-y: auto;
+}
+
+/* Optional: hide scrollbar for cleaner look on webkit browsers */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
 }
 
 .nav-group {

@@ -22,7 +22,7 @@
   flex-direction: column;
   gap: 24px;
   padding: 0;
-  color: var(--text-main);
+  color: var(--text-primary);
   animation: fadeIn 0.4s ease forwards;
 }
 
@@ -60,7 +60,7 @@
 
 .navTab:hover {
   background: var(--bg-hover);
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .activeTab {
@@ -114,7 +114,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   background: #f8fafc;
   outline: none;
   transition: all 0.2s ease;
@@ -174,14 +174,14 @@
 .dataTable td {
   padding: 16px;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
 }
 
 .taskTitle {
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .assigneeCell {
@@ -233,7 +233,7 @@
 .actionBtn {
   background: white;
   border: 1px solid var(--border-color);
-  color: var(--text-main);
+  color: var(--text-primary);
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 12px;
@@ -318,7 +318,7 @@
   border: none;
   outline: none;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   background: transparent;
 }
 
@@ -370,7 +370,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 13px;
-  color: var(--text-main);
+  color: var(--text-primary);
   background: white;
   outline: none;
   font-weight: 600;
@@ -381,7 +381,7 @@
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;

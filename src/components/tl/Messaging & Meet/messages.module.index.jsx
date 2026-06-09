@@ -3,6 +3,17 @@ import styles from './messages.module.css';
 import { Hash, Send, Plus, Search, Sparkles, X, PhoneCall, ChevronDown, ChevronUp, Video, Mic, VideoOff, MicOff, Monitor, Volume2, Trash2, PhoneOff, Users, Smile, Hand, MoreVertical, MessageSquare, Paperclip, Clock, Pizza, Building, Lightbulb, Trophy, LayoutGrid, Maximize, PictureInPicture, AlertOctagon, AlertCircle, Activity, Settings, ArrowLeft, Subtitles, Languages } from 'lucide-react';
 import HuddleModal from '../../employee/HuddleModal';
 
+export const getAvatarUrl = (avatar, name) => {
+  if (avatar && avatar !== 'null' && avatar !== 'undefined' && String(avatar).trim() !== '' && String(avatar).startsWith('http')) {
+    return avatar;
+  }
+  const initial = (name || 'U').charAt(0).toUpperCase();
+  const colors = ['#f56565', '#ed8936', '#ecc94b', '#48bb78', '#38b2ac', '#4299e1', '#667eea', '#9f7aea', '#ed64a6'];
+  const color = colors[(name || '').length % colors.length || 0];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" fill="${color}"/><text x="50" y="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="50" font-weight="bold">${initial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
 const DEFAULT_CHAT_CHANNELS = [
   {
     id: 'general-channel',
@@ -61,6 +72,12 @@ const DEFAULT_CHAT_CHANNELS = [
 const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
   const tlName = currentUser?.name || 'Michael Vance';
   const [dbChannels, setDbChannels] = useState([]);
+  useEffect(() => {
+    if (db?.chatChannels) {
+      setDbChannels(db.chatChannels);
+    }
+  }, [db?.chatChannels]);
+
   const socketRef = useRef(null);
 
   const fetchChannelsAndMessages = async () => {
@@ -84,7 +101,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                 name: c.name,
                 label: c.label,
                 type: c.type,
-                members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
+                members: c.members && c.members.length > 0 ? c.members : (c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo']),
                 messages: msgs.map(m => ({
                   id: m.id,
                   sender: m.sender,
@@ -128,7 +145,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
   }, []);
 
   const chatChannels = dbChannels.length > 0 ? dbChannels : (db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS);
-  const myChannels = chatChannels.filter(c => c.members && c.members.includes('101'));
+  const myChannels = chatChannels.filter(c => c.id === "general-channel" || (c.members && c.members.includes(String(currentUser?.id || '101'))));
 
   // Selected channel state
   const [selectedChannel, setSelectedChannel] = useState(() => {
@@ -138,24 +155,16 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
 
   const [huddlePeer, setHuddlePeer] = useState(null);
 
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'Alice Chen', avatar: 'https://ui-avatars.com/api/?name=Alice+Chen&background=0D8ABC&color=fff', status: 'Active' },
-    { id: 2, name: 'Bob Smith', avatar: 'https://ui-avatars.com/api/?name=Bob+Smith&background=3B82F6&color=fff', status: 'Active' },
-    { id: 3, name: 'Charlie Davis', avatar: 'https://ui-avatars.com/api/?name=Charlie+Davis&background=6B7280&color=fff', status: 'Active' },
-    { id: 4, name: 'Diana Prince', avatar: 'https://ui-avatars.com/api/?name=Diana+Prince&background=F59E0B&color=fff', status: 'On Leave' },
-    { id: 5, name: 'Evan Wright', avatar: 'https://ui-avatars.com/api/?name=Evan+Wright&background=EF4444&color=fff', status: 'Active' },
-    { id: 6, name: 'Fiona Gallagher', avatar: 'https://ui-avatars.com/api/?name=Fiona+Gallagher&background=10B981&color=fff', status: 'Active' },
-    { id: 7, name: 'George Hale', avatar: 'https://ui-avatars.com/api/?name=George+Hale&background=3B82F6&color=fff', status: 'Active' },
-    { id: 8, name: 'Hannah Lee', avatar: 'https://ui-avatars.com/api/?name=Hannah+Lee&background=F59E0B&color=fff', status: 'Active' },
-    { id: 9, name: 'Ivy Green', avatar: 'https://ui-avatars.com/api/?name=Ivy+Green&background=EF4444&color=fff', status: 'Active' },
-    { id: 10, name: 'Jack White', avatar: 'https://ui-avatars.com/api/?name=Jack+White&background=EF4444&color=fff', status: 'Active' },
-    { id: 11, name: 'Kevin Taylor', avatar: 'https://ui-avatars.com/api/?name=Kevin+Taylor&background=8B5CF6&color=fff', status: 'Active' },
-    { id: 12, name: 'Michael Chang', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 102, name: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 104, name: 'Emily Rodriguez', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 105, name: 'David Miller', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'On Leave' }
-  ]);
+  const [employees, setEmployees] = useState([]);
+  
+  useEffect(() => {
+    if (db?.employees && db.employees.length > 0) {
+      setEmployees(db.employees);
+    }
+  }, [db?.employees]);
 
+  const globalDirectory = db?.employees || [];
+  
   // Initialize WebSocket connection for real-time messaging
   useEffect(() => {
     let socket;
@@ -405,12 +414,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
   
 
 
-  const globalDirectory = [
-    { id: 106, name: 'Sophia Patel', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100', status: 'On Leave', role: 'Marketing Specialist' },
-    { id: 107, name: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Frontend Developer Candidate' },
-    { id: 108, name: 'Jessica Chen', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'Product Manager Candidate' },
-    { id: 109, name: 'Liam O\'Connor', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'Active', role: 'DevOps Candidate' }
-  ];
+
 
   const currentChannel = chatChannels.find(c => c.id === selectedChannel);
 
@@ -653,7 +657,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
     
     const currentChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
     const updated = [...currentChannels, newChan];
-    if (onUpdateDb) onUpdateDb({ ...db, chatChannels: updated });
+    if (onUpdateDb) setDbChannels(updated); onUpdateDb({ ...db, chatChannels: updated });
     
     setNewChannelName('');
     setNewChannelDesc('');
@@ -774,7 +778,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       setLocalDmMessages(prev => ({
         ...prev,
@@ -838,7 +842,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
           }
           return c;
         });
-        onUpdateDb({ ...db, chatChannels: updatedChannels });
+        setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
       }
     }, 1500);
   };
@@ -891,7 +895,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       setLocalDmMessages(prev => ({
         ...prev,
@@ -1500,7 +1504,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
               onMouseEnter={() => setActiveSuggestionIndex(index)}
             >
               {user.avatar ? (
-                <img src={user.avatar} alt={user.name} className={styles.mentionAvatar} />
+                <img src={getAvatarUrl(user.avatar, user.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, user.name); }} alt={user.name} className={styles.mentionAvatar} />
               ) : (
                 <div className={`${styles.mentionAvatar} ${styles.mentionAvatarGroup}`}>
                   <Users size={14} style={{ color: isDark ? '#94a3b8' : 'var(--text-secondary)' }} />
@@ -1662,18 +1666,6 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
       <div className={styles.channelsSidebar}>
         <div className={styles.sidebarHeader}>
           <h3>Colleagues Chat</h3>
-          <button 
-            className={styles.addBtn} 
-            title="Create Channel"
-            onClick={() => {
-              setIsModalOpen(true);
-              setNewChannelName('');
-              setNewChannelDesc('');
-              setChannelError('');
-            }}
-          >
-            <Plus size={16} />
-          </button>
         </div>
 
         <div className={styles.searchBox}>
@@ -1735,7 +1727,11 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                   onClick={() => setSelectedChannel(`dm-${emp.id}`)}
                 >
                   <div className={styles.avatarWrapper}>
-                    <img src={emp.avatar} alt={emp.name} />
+                      <img 
+                        src={getAvatarUrl(emp.avatar, emp.name)} 
+                        alt={emp.name} 
+                        onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, emp.name); }}
+                      />
                     <span className={`${styles.statusDot} ${emp.status === 'On Leave' ? styles.onleave : styles.active}`} />
                   </div>
                   <span>{emp.name}</span>
@@ -1770,7 +1766,11 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                     title={`Start chat with ${item.name}`}
                   >
                     <div className={styles.avatarWrapper}>
-                      <img src={item.avatar} alt={item.name} />
+                      <img 
+                        src={getAvatarUrl(item.avatar, item.name)} 
+                        alt={item.name} 
+                        onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, item.name); }}
+                      />
                       <span className={`${styles.statusDot} ${item.status === 'On Leave' ? styles.onleave : styles.active}`} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1799,7 +1799,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
       {/* Main Chat Area */}
       <div className={styles.chatArea}>
         {!selectedChannel ? (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'center', alignItems: 'center', padding: '40px', background: '#ffffff', color: 'var(--text-main)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'center', alignItems: 'center', padding: '40px', background: '#ffffff', color: 'var(--text-primary)' }}>
             <Hash size={48} style={{ color: 'var(--text-light)', marginBottom: '16px' }} />
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>No active conversation</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '280px', textAlign: 'center', lineHeight: '1.5' }}>
@@ -1820,7 +1820,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                 </button>
                 {isDM ? (
               <div className={styles.avatarWrapper} style={{ width: '28px', height: '28px', position: 'relative' }}>
-                <img src={dmEmployee?.avatar} alt={dmEmployee?.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getAvatarUrl(dmEmployee?.avatar, dmEmployee?.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, dmEmployee?.name); }} alt={dmEmployee?.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 <span className={`${styles.statusDot} ${dmEmployee?.status === 'On Leave' ? styles.onleave : styles.active}`} style={{ border: '2px solid #ffffff' }} />
               </div>
             ) : (
@@ -1951,7 +1951,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                 onMouseEnter={() => setHoveredMessageId(msgId)}
                 onMouseLeave={() => { setHoveredMessageId(null); if (reactionPickerMsgId === msgId) setReactionPickerMsgId(null); }}
               >
-                <img src={msg.avatar} alt={msg.sender} className={styles.senderAvatar} />
+                <img src={getAvatarUrl(msg.avatar, msg.sender)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, msg.sender); }} alt={msg.sender} className={styles.senderAvatar} />
                 <div className={styles.messageContent}>
                   <div className={styles.messageMeta}>
                     <span className={styles.senderName}>{msg.sender}</span>
@@ -2092,7 +2092,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                     return (
                       <div key={member.id} className={styles.memberAvatarWrapper} title={member.name}>
                         {member.avatar ? (
-                          <img src={member.avatar} alt={member.name} className={styles.memberAvatarImg} />
+                          <img src={getAvatarUrl(member.avatar, member.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, member.name); }} alt={member.name} className={styles.memberAvatarImg} />
                         ) : (
                           <div className={styles.memberAvatarPlaceholder}>
                             {member.initial}
@@ -2312,7 +2312,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                             }
                           }}
                         >
-                          <img src={emp.avatar} alt={emp.name} className={styles.addMemberAvatar} />
+                          <img src={getAvatarUrl(emp.avatar, emp.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, emp.name); }} alt={emp.name} className={styles.addMemberAvatar} />
                           <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                             <span className={styles.addMemberName}>{emp.name}</span>
                             {emp.role && (
@@ -2486,7 +2486,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                       }
                       return c;
                     });
-                    onUpdateDb({ ...db, chatChannels: updatedChannels });
+                    setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
                   } else {
                     setLocalDmMessages(prev => ({
                       ...prev,
@@ -2565,7 +2565,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                         ) : (
                           <div className={styles.participantAvatarFallback}>
                             {spotlight.avatar ? (
-                              <img src={spotlight.avatar} alt={spotlight.name} className={styles.participantAvatarImg} style={{ width: '140px', height: '140px' }} />
+                              <img src={getAvatarUrl(spotlight.avatar, spotlight.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, spotlight.name); }} alt={spotlight.name} className={styles.participantAvatarImg} style={{ width: '140px', height: '140px' }} />
                             ) : (
                               <div className={styles.participantAvatarInitial} style={{ width: '140px', height: '140px', fontSize: '54px' }}>{spotlight.initial}</div>
                             )}
@@ -2605,7 +2605,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                         )
                       ) : (
                         p.avatar ? (
-                          <img src={p.avatar} alt={p.name} className={styles.floatingParticipantAvatar} />
+                          <img src={getAvatarUrl(p.avatar, p.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, p.name); }} alt={p.name} className={styles.floatingParticipantAvatar} />
                         ) : (
                           <div className={styles.floatingParticipantAvatarPlaceholder}>{p.initial}</div>
                         )
@@ -2654,7 +2654,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                       <div key={p.id} className={styles.participantCard}>
                         <div className={styles.participantAvatarFallback}>
                           {p.avatar ? (
-                            <img src={p.avatar} alt={p.name} className={styles.participantAvatarImg} />
+                            <img src={getAvatarUrl(p.avatar, p.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, p.name); }} alt={p.name} className={styles.participantAvatarImg} />
                           ) : (
                             <div className={styles.participantAvatarInitial}>{p.initial}</div>
                           )}
@@ -2721,7 +2721,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                               <div className={styles.memberAvatarWrapper} style={{ width: '36px', height: '36px' }}>
                                 {p.avatar ? (
-                                  <img src={p.avatar} alt={p.name} className={styles.memberAvatarImg} />
+                                  <img src={getAvatarUrl(p.avatar, p.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, p.name); }} alt={p.name} className={styles.memberAvatarImg} />
                                 ) : (
                                   <div className={styles.memberAvatarPlaceholder} style={{ fontSize: '14px', width: '100%', height: '100%' }}>{p.initial}</div>
                                 )}
@@ -2747,7 +2747,7 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
                                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: 0.6 }}>
                                   <div className={styles.memberAvatarWrapper} style={{ width: '36px', height: '36px' }}>
                                     {p.avatar ? (
-                                      <img src={p.avatar} alt={p.name} className={styles.memberAvatarImg} />
+                                      <img src={getAvatarUrl(p.avatar, p.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, p.name); }} alt={p.name} className={styles.memberAvatarImg} />
                                     ) : (
                                       <div className={styles.memberAvatarPlaceholder} style={{ fontSize: '14px', width: '100%', height: '100%' }}>{p.initial}</div>
                                     )}
@@ -3247,8 +3247,39 @@ const Messages = ({ initialSelectedChannel, db, onUpdateDb, currentUser }) => {
           onClose={() => setHuddlePeer(null)} 
         />
       )}
+
+      {/* ── View Members Modal ──────────────────────────────────────────────── */}
+      {showMembersModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}>
+          <div style={{ width: "400px", maxHeight: "70vh", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderLeft: "4px solid var(--accent-pink)", padding: "24px", borderRadius: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "12px" }}>
+              <h3 style={{ margin: 0, color: "var(--accent-pink)" }}>Channel Members</h3>
+              <button type="button" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={() => setShowMembersModal(false)}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {(() => {
+                const membersList = chatChannels.find(c => c.id === activeRoomId)?.members || [];
+                const memberDetails = [];
+                if (membersList.includes("ceo")) memberDetails.push("John Doe (CEO)");
+                if (membersList.includes("hr")) memberDetails.push("Sarah Jenkins (HR)");
+                membersList.forEach(mId => {
+                  if (mId !== "ceo" && mId !== "hr") {
+                    const emp = db.employees?.find(e => String(e.id) === String(mId));
+                    if (emp) memberDetails.push(`${emp.name} (${emp.designation})`);
+                  }
+                });
+                if (memberDetails.length === 0) return <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No members added yet.</div>;
+                return memberDetails.map((name, i) => (
+                  <div key={i} style={{ padding: "8px 12px", backgroundColor: "var(--bg-primary)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)" }}>{name}</div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
-  );
+);
 };
 
 export default Messages;

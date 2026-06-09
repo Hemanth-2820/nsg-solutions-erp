@@ -67,6 +67,12 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
   const ceoName = currentUser?.name || 'John Doe';
   const [huddlePeer, setHuddlePeer] = useState(null);
   const [dbChannels, setDbChannels] = useState([]);
+  useEffect(() => {
+    if (db?.chatChannels) {
+      setDbChannels(db.chatChannels);
+    }
+  }, [db?.chatChannels]);
+
   const socketRef = useRef(null);
 
   const fetchChannelsAndMessages = async () => {
@@ -90,7 +96,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
                 name: c.name,
                 label: c.label,
                 type: c.type,
-                members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
+                members: c.members && c.members.length > 0 ? c.members : (c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo']),
                 messages: msgs.map(m => ({
                   id: m.id,
                   sender: m.sender,
@@ -131,21 +137,20 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
   
   // === MOCK DATA ===
   const chatChannels = dbChannels.length > 0 ? dbChannels : (db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS);
-  const myChannels = chatChannels.filter(c => c.members && c.members.includes('ceo'));
+  const myChannels = chatChannels.filter(c => c.id === "general-channel" || (c.members && c.members.includes(String(currentUser?.id || 'ceo'))));
 
   const [selectedChannel, setSelectedChannel] = useState(() => {
     if (initialSelectedChannel) return initialSelectedChannel;
     return myChannels.length > 0 ? myChannels[0].id : 'general-channel';
   });
 
-  const [employees, setEmployees] = useState([
-    { id: 1, name: 'Alice Chen', avatar: 'https://ui-avatars.com/api/?name=Alice+Chen&background=0D8ABC&color=fff', status: 'Active' },
-    { id: 2, name: 'Sarah Jenkins', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 3, name: 'Michael Chang', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 4, name: 'Emily Rodriguez', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=100', status: 'Active' },
-    { id: 5, name: 'David Miller', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100', status: 'On Leave' },
-    { id: 'ceo', name: 'John Doe', avatar: 'https://ui-avatars.com/api/?name=John+Doe&background=1e293b&color=fff', status: 'Active', isMe: true }
-  ]);
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    if (db?.employees && db.employees.length > 0) {
+      setEmployees(db.employees);
+    }
+  }, [db?.employees]);
 
   const [localDmMessages, setLocalDmMessages] = useState({
     'dm-3': [
@@ -169,6 +174,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
   // === CHANNEL MANAGEMENT ===
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState([]);
   const [channelMembers, setChannelMembers] = useState({
     'announcements': [1, 2, 3, 4, 5],
     'general': [1, 2, 3, 4, 5],
@@ -316,7 +322,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       setLocalDmMessages(prev => ({
         ...prev,
@@ -383,7 +389,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       setLocalDmMessages(prev => ({
         ...prev,
@@ -422,7 +428,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       setLocalDmMessages(prev => ({
         ...prev,
@@ -514,7 +520,7 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
   };
 
   // Create Channel logic
-  const handleCreateChannel = (e) => {
+  const handleCreateChannel = async (e) => {
     e.preventDefault();
     if (!newChannelName.trim()) return;
     
@@ -523,12 +529,15 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
     const baseId = rawName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'channel';
     const newId = `${baseId}-${Date.now()}`;
     
+    const channelMembers = selectedMembers.length > 0 ? selectedMembers : ['ceo'];
+    if (!channelMembers.includes('ceo')) channelMembers.push('ceo');
+
     const newChan = {
       id: newId,
       name: formattedName,
       label: `${rawName} Channel`,
       type: 'staff',
-      members: ['101', '102', '103', '104', '105', 'hr', 'ceo'],
+      members: channelMembers,
       messages: [
         {
           id: Date.now(),
@@ -539,9 +548,29 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
       ]
     };
     
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      await fetch('/api/employee-portal/chat/channels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: newChan.id,
+          name: newChan.name,
+          label: newChan.label,
+          type: newChan.type,
+          members: newChan.members
+        })
+      });
+    } catch (err) {
+      console.error("Failed to save channel to backend:", err);
+    }
+
     const currentChannels = db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS;
     const updated = [...currentChannels, newChan];
-    onUpdateDb({ ...db, chatChannels: updated });
+    setDbChannels(updated); onUpdateDb({ ...db, chatChannels: updated });
     
     setNewChannelName('');
     setIsCreateChannelOpen(false);
@@ -1062,8 +1091,30 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
                   style={{ width: '100%', border: 'none', background: 'transparent', padding: '12px', fontSize: '14px', outline: 'none' }} 
                 />
               </div>
+              <div style={{ marginTop: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--ceo-text-secondary)', marginBottom: '8px' }}>SELECT MEMBERS</label>
+                <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--ceo-border)', borderRadius: '8px', padding: '8px', background: '#F8FAFC' }}>
+                  {employees.filter(e => String(e.id) !== 'ceo').map(emp => (
+                    <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', cursor: 'pointer', borderRadius: '4px', ':hover': { background: '#FFF' } }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedMembers.includes(String(emp.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedMembers([...selectedMembers, String(emp.id)]);
+                          } else {
+                            setSelectedMembers(selectedMembers.filter(id => id !== String(emp.id)));
+                          }
+                        }}
+                      />
+                      <img src={emp.avatar} alt={emp.name} style={{ width: '24px', height: '24px', borderRadius: '12px' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>{emp.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button type="button" onClick={() => setIsCreateChannelOpen(false)} className="ceo-btn" style={{ fontWeight: 700 }}>Cancel</button>
+                <button type="button" onClick={() => { setIsCreateChannelOpen(false); setSelectedMembers([]); setNewChannelName(''); }} className="ceo-btn" style={{ fontWeight: 700 }}>Cancel</button>
                 <button type="submit" className="ceo-btn ceo-btn-primary" style={{ fontWeight: 700 }}>Create Channel</button>
               </div>
             </form>
@@ -1169,6 +1220,37 @@ export default function Messaging({ initialSelectedChannel, db, onUpdateDb, curr
           onClose={() => setHuddlePeer(null)} 
         />
       )}
+
+      {/* ── View Members Modal ──────────────────────────────────────────────── */}
+      {showMembersModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}>
+          <div style={{ width: "400px", maxHeight: "70vh", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderLeft: "4px solid var(--accent-pink)", padding: "24px", borderRadius: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "12px" }}>
+              <h3 style={{ margin: 0, color: "var(--accent-pink)" }}>Channel Members</h3>
+              <button type="button" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={() => setShowMembersModal(false)}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {(() => {
+                const membersList = chatChannels.find(c => c.id === activeRoomId)?.members || [];
+                const memberDetails = [];
+                if (membersList.includes("ceo")) memberDetails.push("John Doe (CEO)");
+                if (membersList.includes("hr")) memberDetails.push("Sarah Jenkins (HR)");
+                membersList.forEach(mId => {
+                  if (mId !== "ceo" && mId !== "hr") {
+                    const emp = db.employees?.find(e => String(e.id) === String(mId));
+                    if (emp) memberDetails.push(`${emp.name} (${emp.designation})`);
+                  }
+                });
+                if (memberDetails.length === 0) return <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No members added yet.</div>;
+                return memberDetails.map((name, i) => (
+                  <div key={i} style={{ padding: "8px 12px", backgroundColor: "var(--bg-primary)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)" }}>{name}</div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
-  );
+);
 }

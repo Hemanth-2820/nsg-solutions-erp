@@ -308,6 +308,7 @@ class ChatChannel(Base):
     name = Column(String, nullable=False)
     label = Column(String, nullable=True)
     type = Column(String, nullable=False)  # staff, grievance, management
+    members = Column(Text, nullable=True)  # JSON-serialized list of strings
 
 
 class ChatMessage(Base):

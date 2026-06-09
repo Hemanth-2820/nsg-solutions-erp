@@ -498,11 +498,29 @@ def submit_ticket(req: TicketCreate, current_user: models.User = Depends(securit
 
 # ─── 8. CHAT SCHEMAS & ROUTES ─────────────────────────────────────────────────
 
+class ChannelCreate(BaseModel):
+    id: str
+    name: str
+    label: Optional[str]
+    type: str
+    members: List[str]
+
 class ChannelResponse(BaseModel):
     id: str
     name: str
     label: Optional[str]
     type: str
+    members: List[str] = []
+
+    @field_validator("members", mode="before")
+    def parse_members(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except Exception:
+                return []
+        return v or []
 
     class Config:
         from_attributes = True
@@ -524,6 +542,21 @@ class MessageResponse(BaseModel):
 def get_channels(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
     return db.query(models.ChatChannel).all()
 
+@router.post("/chat/channels", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
+def create_channel(req: ChannelCreate, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+    import json
+    channel = models.ChatChannel(
+        id=req.id,
+        name=req.name,
+        label=req.label,
+        type=req.type,
+        members=json.dumps(req.members)
+    )
+    db.add(channel)
+    db.commit()
+    db.refresh(channel)
+    return channel
+
 @router.get("/chat/channels/{channel_id}/messages", response_model=List[MessageResponse])
 def get_channel_messages(channel_id: str, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
     return db.query(models.ChatMessage).filter(models.ChatMessage.channel_id == channel_id).order_by(models.ChatMessage.timestamp.asc()).all()
@@ -543,6 +576,49 @@ def send_message(channel_id: str, req: MessageCreate, db: Session = Depends(data
     db.commit()
     db.refresh(msg)
     return msg
+
+
+class MembersUpdate(BaseModel):
+    members: List[str]
+
+@router.put("/chat/channels/{channel_id}/members", response_model=ChannelResponse)
+def update_channel_members(channel_id: str, req: MembersUpdate, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+    """Update the member list for a channel. Called by HR portal when adding/removing employees."""
+    import json
+    channel = db.query(models.ChatChannel).filter(models.ChatChannel.id == channel_id).first()
+    if not channel:
+        # Auto-create channel if it does not exist
+        channel = models.ChatChannel(
+            id=channel_id,
+            name=f"#{channel_id}",
+            label=f"Channel {channel_id}",
+            type="staff",
+            members=json.dumps(req.members)
+        )
+        db.add(channel)
+    else:
+        channel.members = json.dumps(req.members)
+    db.commit()
+    db.refresh(channel)
+    return channel
+
+
+@router.get("/chat/my-channels", response_model=List[ChannelResponse])
+def get_my_channels(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+    """Return only channels where the current logged-in user's ID is in the members list."""
+    import json
+    all_channels = db.query(models.ChatChannel).all()
+    my_channels = []
+    user_id_str = str(current_user.id)
+    for ch in all_channels:
+        try:
+            members = json.loads(ch.members) if isinstance(ch.members, str) else (ch.members or [])
+        except Exception:
+            members = []
+        # Include channel if user's ID (as string) is in members list
+        if user_id_str in [str(m) for m in members]:
+            my_channels.append(ch)
+    return my_channels
 
 
 # ─── WebSocket Connection Manager & Endpoint ───────────────────────────────

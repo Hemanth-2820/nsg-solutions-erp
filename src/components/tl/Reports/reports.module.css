@@ -50,7 +50,7 @@
   flex-direction: column;
   gap: 24px;
   padding: 0;
-  color: var(--text-main);
+  color: var(--text-primary);
   animation: fadeIn 0.4s ease forwards;
 }
 
@@ -88,7 +88,7 @@
 
 .navTab:hover {
   background: var(--bg-hover);
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 
 .activeTab {
@@ -181,7 +181,7 @@
 .prodTable td {
   padding: 16px;
   font-size: 14px;
-  color: var(--text-main);
+  color: var(--text-primary);
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -305,7 +305,7 @@
 .exportBtn {
   background: white;
   border: 1px solid var(--border-color);
-  color: var(--text-main);
+  color: var(--text-primary);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 14px;

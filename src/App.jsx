@@ -334,6 +334,16 @@ export default function App() {
   };
 
   const [db, setDb] = useState(() => loadDbSync());
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === "nsg_hr_db" && e.newValue) {
+        setDb(JSON.parse(e.newValue));
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   const [token, setToken] = useState(() => localStorage.getItem('nsg_jwt_token') || '');
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(!!token);

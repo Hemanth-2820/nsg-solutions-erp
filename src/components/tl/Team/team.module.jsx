@@ -163,7 +163,7 @@ const TeamDirectory = () => {
             style={{ 
               width: '100%', padding: '18px 24px 18px 52px', borderRadius: '12px', 
               border: 'none', background: 'transparent', 
-              color: 'var(--text-main)', fontSize: '15px', outline: 'none'
+              color: 'var(--text-primary)', fontSize: '15px', outline: 'none'
             }} 
           />
         </div>

@@ -5,6 +5,17 @@ import {
 } from 'lucide-react';
 import HuddleModal from './HuddleModal';
 
+export const getAvatarUrl = (avatar, name) => {
+  if (avatar && avatar !== 'null' && avatar !== 'undefined' && String(avatar).trim() !== '' && String(avatar).startsWith('http')) {
+    return avatar;
+  }
+  const initial = (name || 'U').charAt(0).toUpperCase();
+  const colors = ['#f56565', '#ed8936', '#ecc94b', '#48bb78', '#38b2ac', '#4299e1', '#667eea', '#9f7aea', '#ed64a6'];
+  const color = colors[(name || '').length % colors.length || 0];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" fill="${color}"/><text x="50" y="50" dominant-baseline="central" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="50" font-weight="bold">${initial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
 let msgIdCounter = 10000;
 
 // Mock database for contacts (filtered by team_id)
@@ -103,6 +114,12 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
   const employeeName = currentUser?.name || 'Jane Smith';
 
   const [dbChannels, setDbChannels] = useState([]);
+  useEffect(() => {
+    if (db?.chatChannels) {
+      setDbChannels(db.chatChannels);
+    }
+  }, [db?.chatChannels]);
+
 
   const getInitialRooms = () => {
     if (db?.employeeChatRooms) {
@@ -128,8 +145,10 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
     }
   }, [db]);
 
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState('general-channel');
   const [inputText, setInputText] = useState('');
+  
   
   // Emoji & Attachment States
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -147,58 +166,52 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Filter contacts to Sarah's team only (team_id === 'eng')
-  const teammates = CONTACTS.filter((c) => c.teamId === 'eng');
+  // Fetch all employees for DM list
+  const teammates = db?.employees?.length > 0 ? db.employees : CONTACTS;
 
   const fetchChannelsAndMessages = async () => {
     const token = localStorage.getItem('nsg_jwt_token');
     if (!token) return;
     try {
-      const res = await fetch('/api/employee-portal/chat/channels', {
+      // Use /my-channels which filters by the logged-in user's backend ID
+      const res = await fetch('/api/employee-portal/chat/my-channels', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const chans = await res.json();
-        const loadedChannels = await Promise.all(chans.map(async (c) => {
-          try {
-            const msgRes = await fetch(`/api/employee-portal/chat/channels/${c.id}/messages`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (msgRes.ok) {
-              const msgs = await msgRes.json();
-              return {
-                id: c.id,
-                name: c.name,
-                label: c.label,
-                type: c.type,
-                members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
-                messages: msgs.map(m => ({
-                  id: m.id,
-                  sender: m.sender,
-                  text: m.text,
-                  time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  isMe: m.sender === employeeName
-                }))
-              };
+        if (chans.length > 0) {
+          // Merge messages from backend into channels
+          const loadedChannels = await Promise.all(chans.map(async (c) => {
+            try {
+              const msgRes = await fetch(`/api/employee-portal/chat/channels/${c.id}/messages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (msgRes.ok) {
+                const msgs = await msgRes.json();
+                return {
+                  id: c.id,
+                  name: c.name,
+                  label: c.label,
+                  type: c.type,
+                  members: c.members,
+                  messages: msgs.map(m => ({
+                    id: m.id,
+                    sender: m.sender,
+                    text: m.text,
+                    time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    isMe: m.sender === employeeName
+                  }))
+                };
+              }
+            } catch (e) {
+              console.error('Error loading messages for channel', c.id, e);
             }
-          } catch (e) {
-            console.error("Error loading messages for channel", c.id, e);
-          }
-          return {
-            id: c.id,
-            name: c.name,
-            label: c.label,
-            type: c.type,
-            members: c.type === 'grievance' ? ['102', 'hr'] : ['101', '102', '103', '104', '105', 'hr', 'ceo'],
-            messages: []
-          };
-        }));
-        setDbChannels(loadedChannels);
-        if (onUpdateDb) {
-          onUpdateDb({
-            ...db,
-            chatChannels: loadedChannels
-          });
+            return { id: c.id, name: c.name, label: c.label, type: c.type, members: c.members, messages: [] };
+          }));
+          setDbChannels(loadedChannels);
+        } else {
+          // No channels assigned to this user by HR yet
+          setDbChannels([]);
         }
       }
     } catch (e) {
@@ -208,6 +221,9 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
 
   useEffect(() => {
     fetchChannelsAndMessages();
+    // Poll every 5 seconds to pick up HR portal member changes
+    const interval = setInterval(fetchChannelsAndMessages, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handle Resize
@@ -232,9 +248,15 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
     localStorage.setItem('nsg_employee_chat_rooms', JSON.stringify(rooms));
   }, [rooms]);
 
+  // chatChannels comes from /my-channels API which only returns channels this user is a member of
+  // No client-side filtering needed - the backend handles it using SQLite member data saved by HR portal
   const chatChannels = dbChannels.length > 0 ? dbChannels : (db?.chatChannels && db.chatChannels.length > 0 ? db.chatChannels : DEFAULT_CHAT_CHANNELS);
+  const matchedEmp = db?.employees?.find(e => e.email === currentUser?.email) || db?.employees?.find(e => e.name === currentUser?.name);
+  const currentUserIdStr = String(matchedEmp?.id || currentUser?.id);
+  // myChannels = all returned channels (already filtered by backend /my-channels)
+  const myChannels = chatChannels;
 
-  const activeRoom = chatChannels.find(c => c.id === activeRoomId) || rooms[activeRoomId] || (
+  const activeRoom = myChannels.find(c => c.id === activeRoomId) || rooms[activeRoomId] || (
     activeRoomId.startsWith('c') ? {
       id: activeRoomId,
       name: teammates.find((c) => c.id === activeRoomId)?.name || 'Teammate',
@@ -388,7 +410,7 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
         }
         return c;
       });
-      onUpdateDb({ ...db, chatChannels: updatedChannels });
+      setDbChannels(updatedChannels); onUpdateDb({ ...db, chatChannels: updatedChannels });
     } else {
       const updatedMessages = [...(activeRoom.messages || []), userMessage];
       const newRooms = {
@@ -454,7 +476,7 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
           }
           return c;
         });
-        onUpdateDb({ ...db, chatChannels: latestChannels });
+        setDbChannels(latestChannels); onUpdateDb({ ...db, chatChannels: latestChannels });
       } else {
         const currentRooms = db?.employeeChatRooms || rooms;
         const latestRoom = currentRooms[activeRoomId] || activeRoom;
@@ -783,7 +805,7 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
 
             {/* Channels & Rooms List */}
             <div style={{ flex: 1, overflowY: 'auto' }} className="chat-sidebar-scroll">
-              {chatChannels.filter(c => c.members && c.members.includes(String(employeeId))).map(c => {
+              {myChannels.map(c => {
                 const isActive = activeRoomId === c.id;
                 const isGrievance = c.type === 'grievance';
                 return (
@@ -845,8 +867,7 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
                   onClick={() => handleSelectDM(contact.id)}
                 >
                   <div style={{ position: 'relative' }}>
-                    <img 
-                      src={contact.avatar} 
+                    <img src={getAvatarUrl(contact.avatar, contact.name)} onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, contact.name); }} 
                       alt={contact.name} 
                       style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
                     />
@@ -943,6 +964,16 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
                   </span>
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {activeRoom.desc || 'Active discussion'}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>•</span>
+                  <span 
+                    onClick={() => setShowMembersModal(true)}
+                    style={{ fontSize: '10px', color: 'var(--accent-pink)', cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>
+                    {(() => {
+                      const members = chatChannels.find(c => c.id === activeRoomId)?.members;
+                      if (!members) return "0 Members";
+                      return members.length + " Members";
+                    })()}
                   </span>
                 </div>
               </div>
@@ -1338,7 +1369,12 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
                   }}
                   className="creator-teammate-btn"
                 >
-                  <img src={c.avatar} alt={c.name} style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
+                  <img 
+                    src={getAvatarUrl(c.avatar, c.name)} 
+                    alt={c.name} 
+                    style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} 
+                    onError={(e) => { e.target.onerror = null; e.target.src = getAvatarUrl(null, c.name); }}
+                  />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)' }}>{c.name}</span>
                     <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{c.role}</span>
@@ -1378,6 +1414,37 @@ export default function Messaging({ db, onUpdateDb, currentUser }) {
           onClose={() => setHuddlePeer(null)} 
         />
       )}
+
+      {/* ── View Members Modal ──────────────────────────────────────────────── */}
+      {showMembersModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}>
+          <div style={{ width: "400px", maxHeight: "70vh", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderLeft: "4px solid var(--accent-pink)", padding: "24px", borderRadius: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "12px" }}>
+              <h3 style={{ margin: 0, color: "var(--accent-pink)" }}>Channel Members</h3>
+              <button type="button" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={() => setShowMembersModal(false)}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {(() => {
+                const membersList = chatChannels.find(c => c.id === activeRoomId)?.members || [];
+                const memberDetails = [];
+                if (membersList.includes("ceo")) memberDetails.push("John Doe (CEO)");
+                if (membersList.includes("hr")) memberDetails.push("Sarah Jenkins (HR)");
+                membersList.forEach(mId => {
+                  if (mId !== "ceo" && mId !== "hr") {
+                    const emp = db.employees?.find(e => String(e.id) === String(mId));
+                    if (emp) memberDetails.push(`${emp.name} (${emp.designation})`);
+                  }
+                });
+                if (memberDetails.length === 0) return <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No members added yet.</div>;
+                return memberDetails.map((name, i) => (
+                  <div key={i} style={{ padding: "8px 12px", backgroundColor: "var(--bg-primary)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)" }}>{name}</div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
-  );
+);
 }
