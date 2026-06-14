@@ -1,35 +1,64 @@
-import React, { useState } from 'react';
-import Dashboard from './Dashboard/dashboard.module';
-import Team from './Team/team.module';
-import Projects from './Projects/projects.index';
-import Tasks from './Tasks/index';
-import Attendance from './Attendance/TeamAttendance';
+import React, { useState, lazy, Suspense } from 'react';
 import ErrorBoundary from './ErrorBoundary';
-import Timesheets from './Timesheets/index';
-import Reports from './Reports/index';
-import Escalations from './Escalations/index';
-import Approvals from './Approvals/index';
-import MessagingAndMeet from './Messaging & Meet/messages.module.index';
-import Performance from './Performance/index';
+
+const Dashboard = lazy(() => import('./Dashboard/dashboard.module'));
+const Team = lazy(() => import('./Team/team.module'));
+const Projects = lazy(() => import('./Projects/projects.index'));
+const Tasks = lazy(() => import('./Tasks/index'));
+const Attendance = lazy(() => import('./Attendance/TeamAttendance'));
+const Timesheets = lazy(() => import('./Timesheets/index'));
+const Reports = lazy(() => import('./Reports/index'));
+const Escalations = lazy(() => import('./Escalations/index'));
+const Approvals = lazy(() => import('./Approvals/index'));
+const MessagingAndMeet = lazy(() => import('./Messaging & Meet/messages.module.index'));
+const Performance = lazy(() => import('./Performance/index'));
 
 export default function Tl({ activeTab, setActiveTab, currentUser }) {
   const [selectedChatUser, setSelectedChatUser] = useState(null);
 
+  const fallbackLoader = (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+      <div className="animate-spin" style={{ border: '4px solid #f3f3f3', borderTop: '4px solid #3b82f6', borderRadius: '50%', width: '40px', height: '40px' }}></div>
+    </div>
+  );
+
   return (
     <div className="component-container">
-      <ErrorBoundary>
-        {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setSelectedChatUser={setSelectedChatUser} />}
-        {activeTab === 'team' && <Team setActiveTab={setActiveTab} />}
-        {activeTab === 'projects' && <Projects />}
-        {activeTab === 'tasks' && <Tasks currentUser={currentUser} />}
-        {activeTab === 'attendance' && <Attendance />}
-        {activeTab === 'timesheets' && <Timesheets />}
-        {activeTab === 'approvals' && <Approvals />}
-        {activeTab === 'reports' && <Reports />}
-        {activeTab === 'escalations' && <Escalations />}
-        {activeTab === 'messaging' && <MessagingAndMeet initialSelectedChannel={selectedChatUser} currentUser={currentUser} />}
-        {activeTab === 'performance' && <Performance currentUser={currentUser} />}
-      </ErrorBoundary>
+      <Suspense fallback={fallbackLoader}>
+        {activeTab === 'dashboard' && (
+          <ErrorBoundary><Dashboard setActiveTab={setActiveTab} setSelectedChatUser={setSelectedChatUser} /></ErrorBoundary>
+        )}
+        {activeTab === 'team' && (
+          <ErrorBoundary><Team setActiveTab={setActiveTab} /></ErrorBoundary>
+        )}
+        {activeTab === 'projects' && (
+          <ErrorBoundary><Projects /></ErrorBoundary>
+        )}
+        {activeTab === 'tasks' && (
+          <ErrorBoundary><Tasks currentUser={currentUser} /></ErrorBoundary>
+        )}
+        {activeTab === 'attendance' && (
+          <ErrorBoundary><Attendance /></ErrorBoundary>
+        )}
+        {activeTab === 'timesheets' && (
+          <ErrorBoundary><Timesheets /></ErrorBoundary>
+        )}
+        {activeTab === 'approvals' && (
+          <ErrorBoundary><Approvals /></ErrorBoundary>
+        )}
+        {activeTab === 'reports' && (
+          <ErrorBoundary><Reports /></ErrorBoundary>
+        )}
+        {activeTab === 'escalations' && (
+          <ErrorBoundary><Escalations /></ErrorBoundary>
+        )}
+        {activeTab === 'messaging' && (
+          <ErrorBoundary><MessagingAndMeet initialSelectedChannel={selectedChatUser} currentUser={currentUser} /></ErrorBoundary>
+        )}
+        {activeTab === 'performance' && (
+          <ErrorBoundary><Performance currentUser={currentUser} /></ErrorBoundary>
+        )}
+      </Suspense>
       
       {activeTab !== 'dashboard' && activeTab !== 'team' && activeTab !== 'projects' && activeTab !== 'tasks' && activeTab !== 'attendance' && activeTab !== 'timesheets' && activeTab !== 'approvals' && activeTab !== 'reports' && activeTab !== 'escalations' && activeTab !== 'messaging' && activeTab !== 'performance' && (
         <>

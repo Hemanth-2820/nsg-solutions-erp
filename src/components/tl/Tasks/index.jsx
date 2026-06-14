@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import useSWR from 'swr';
+import AvatarFallback from '../../common/AvatarFallback';
 import styles from './tasks.module.css';
 import { PlusSquare, List, XCircle, GitPullRequest, Edit, UserPlus, RotateCcw, Check, X } from 'lucide-react';
 
@@ -7,9 +9,12 @@ export default function Tasks({ currentUser }) {
   const [subtasks, setSubtasks] = useState(['']);
   const [groupBy, setGroupBy] = useState('None');
   
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [projectsData, setProjectsData] = useState([]);
+  const token = localStorage.getItem('nsg_jwt_token');
+  const fetcher = (url) => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json());
+
+  const { data: teamMembers = [], mutate: mutateTeam } = useSWR('/api/team-lead/team-members', fetcher);
+  const { data: tasks = [], mutate: mutateTasks } = useSWR('/api/team-lead/tasks', fetcher);
+  const { data: projectsData = [], mutate: mutateProjects } = useSWR('/api/team-lead/projects', fetcher);
 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskPoints, setTaskPoints] = useState('');
@@ -17,7 +22,7 @@ export default function Tasks({ currentUser }) {
   const [taskAssignee, setTaskAssignee] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskProject, setTaskProject] = useState('NSG-ERP Core');
-  const [taskSprint, setTaskSprint] = useState('Sprint 14');
+  const [taskSprint, setTaskSprint] = useState('Sprint 1');
   const [taskAcceptance, setTaskAcceptance] = useState('');
   const [taskDue, setTaskDue] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -30,41 +35,7 @@ export default function Tasks({ currentUser }) {
   const [rejectTaskId, setRejectTaskId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  useEffect(() => {
-    fetchTeamMembers();
-    fetchTasks();
-    fetchProjects();
-  }, []);
 
-  const fetchTeamMembers = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/team-members', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setTeamMembers(await res.json());
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchTasks = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/tasks', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setTasks(await res.json());
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchProjects = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/projects', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setProjectsData(await res.json());
-    } catch (e) { console.error(e); }
-  };
 
   const handleAddSubtask = () => setSubtasks([...subtasks, '']);
   const handleRemoveSubtask = (index) => setSubtasks(subtasks.filter((_, i) => i !== index));
@@ -113,7 +84,7 @@ export default function Tasks({ currentUser }) {
       if (res.ok) {
         if (window.toast) window.toast.success("Task reassigned successfully!");
         setReassignModalOpen(false);
-        fetchTasks();
+        mutateTasks();
       } else {
         const data = await res.json();
         if (window.toast) window.toast.error(data.detail || "Failed to reassign task");
@@ -165,7 +136,7 @@ export default function Tasks({ currentUser }) {
       description: taskDescription.trim() || 'Created via TL sprint board',
       priority: priorityVal,
       sp: parseInt(taskPoints) || 1,
-      due: taskDue || '2026-06-15',
+      due: taskDue || new Date().toISOString().split('T')[0],
       assignee_id: parseInt(taskAssignee),
       subtasks: subtasks.filter(t => t.trim() !== ''),
       acceptance: taskAcceptance.split('\n').map(a => a.trim().replace(/^- /, '')).filter(a => a !== '')
@@ -195,7 +166,7 @@ export default function Tasks({ currentUser }) {
         setTaskAcceptance('');
         setEditingTaskId(null);
         setActiveView('list');
-        fetchTasks();
+        mutateTasks();
         if (window.toast) window.toast.success(editingTaskId ? "Task updated successfully!" : "Task created successfully!");
         else alert(editingTaskId ? "Task updated successfully!" : "Task created successfully!");
         setSubtasks(['']);
@@ -210,7 +181,7 @@ export default function Tasks({ currentUser }) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) fetchTasks();
+      if (res.ok) mutateTasks();
     } catch (e) { console.error(e); }
   };
 
@@ -235,7 +206,7 @@ export default function Tasks({ currentUser }) {
       if (res.ok) {
         if (window.toast) window.toast.success("PR Rejected successfully.");
         setRejectModalOpen(false);
-        fetchTasks();
+        mutateTasks();
       }
     } catch (e) { console.error(e); }
   };
@@ -411,7 +382,7 @@ export default function Tasks({ currentUser }) {
                           <td className={styles.taskTitle}>{task.title}</td>
                           <td>
                             <div className={styles.assigneeCell}>
-                              <div className={styles.avatar}>{task.avatar}</div>
+                              <AvatarFallback name={task.assignee} size="24px" />
                               {task.assignee}
                             </div>
                           </td>

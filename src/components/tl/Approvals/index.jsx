@@ -1,156 +1,87 @@
 import React, { useState } from 'react';
+import useSWR from 'swr';
 import styles from './approvals.module.css';
 import { AlertTriangle, MapPin, CheckCircle, Clock, FileText, Camera, GitCommit, Calendar, DollarSign } from 'lucide-react';
 
 const Approvals = () => {
   const [activeTab, setActiveTab] = useState('leave');
   
-  const [leaves, setLeaves] = useState([]);
-  const [corrections, setCorrections] = useState([]);
-  const [teamMembers, setTeamMembers] = useState([]);
+  const token = localStorage.getItem('nsg_jwt_token');
+  const fetcher = (url) => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json());
 
-  React.useEffect(() => {
-    const fetchTeamMembers = async () => {
-      try {
-        const token = localStorage.getItem('nsg_jwt_token');
-        const res = await fetch('/api/team-lead/team-members', { headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) setTeamMembers(await res.json());
-      } catch (e) { console.error(e); }
-    };
-    fetchTeamMembers();
-  }, []);
+  const { data: teamMembers = [] } = useSWR('/api/team-lead/team-members', fetcher);
 
   const getEmpName = (id) => {
     const emp = teamMembers.find(m => m.id === id);
     return emp ? emp.name : `Emp #${id}`;
   };
 
-  const fetchLeaves = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/leaves/pending', { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        // Format to match UI expectations
-        const formatted = data.map(r => ({
-          id: r.id,
-          employee: getEmpName(r.employee_id),
-          employee_id: r.employee_id,
-          type: r.leave_type === 'CL' ? 'Casual Leave' : r.leave_type === 'SL' ? 'Sick Leave' : r.leave_type === 'EL' ? 'Earned Leave' : r.leave_type === 'CompOff' ? 'Comp Off' : r.leave_type,
-          days: r.days,
-          dates: `${r.from_date} – ${r.to_date}`,
-          reason: r.reason,
-          status: r.status,
-          overlapWarning: null
-        }));
-        setLeaves(formatted);
-      }
-    } catch (e) { console.error(e); }
-  };
+  const { data: rawLeaves = [], mutate: mutateLeaves } = useSWR('/api/team-lead/leaves/pending', fetcher);
+  const leaves = rawLeaves.map(r => ({
+    id: r.id,
+    employee: getEmpName(r.user_id || r.employee_id),
+    employee_id: r.user_id || r.employee_id,
+    type: r.leave_type === 'CL' ? 'Casual Leave' : r.leave_type === 'SL' ? 'Sick Leave' : r.leave_type === 'EL' ? 'Earned Leave' : r.leave_type === 'CompOff' ? 'Comp Off' : r.leave_type,
+    days: r.days,
+    dates: `${r.from_date} – ${r.to_date}`,
+    reason: r.reason,
+    status: r.status,
+    overlapWarning: null
+  }));
 
-  const fetchCorrections = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/attendance-corrections/pending', { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = data.map(c => ({
-          id: c.id,
-          employee: getEmpName(c.user_id),
-          date: c.correction_date,
-          requestedTimes: `${new Date(c.requested_clock_in).toLocaleTimeString()} - ${new Date(c.requested_clock_out).toLocaleTimeString()}`,
-          reason: c.reason,
-          status: c.status,
-          photoEvidence: false,
-          gpsCoords: 'Not provided'
-        }));
-        setCorrections(formatted);
-      }
-    } catch (e) { console.error(e); }
-  };
+  const { data: rawCorrections = [], mutate: mutateCorrections } = useSWR('/api/team-lead/attendance-corrections/pending', fetcher);
+  const corrections = rawCorrections.map(c => ({
+    id: c.id,
+    employee: getEmpName(c.user_id),
+    date: c.correction_date,
+    requestedTimes: `${new Date(c.requested_clock_in).toLocaleTimeString()} - ${new Date(c.requested_clock_out).toLocaleTimeString()}`,
+    reason: c.reason,
+    status: c.status,
+    photoEvidence: false,
+    gpsCoords: 'Not provided'
+  }));
 
-  const fetchWfhs = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/wfh/pending', { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = data.map(r => ({
-          id: r.id,
-          employee: getEmpName(r.user_id),
-          date: `${r.from_date} – ${r.to_date}`,
-          reason: r.reason,
-          status: r.status,
-          locationVerified: true
-        }));
-        setWfhs(formatted);
-      }
-    } catch (e) { console.error(e); }
-  };
+  const { data: rawWfhs = [], mutate: mutateWfhs } = useSWR('/api/team-lead/wfh/pending', fetcher);
+  const wfhs = rawWfhs.map(r => ({
+    id: r.id,
+    employee: getEmpName(r.user_id),
+    date: `${r.from_date} – ${r.to_date}`,
+    reason: r.reason,
+    status: r.status,
+    locationVerified: true
+  }));
 
-  const fetchTimesheets = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/timesheets/pending', { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = data.map(ts => {
-          let totalH = 0;
-          (ts.rows || []).forEach(r => {
-            totalH += Object.values(r.hours || {}).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
-          });
-          return {
-            id: ts.id,
-            employee: getEmpName(ts.employee_id),
-            employee_id: ts.employee_id,
-            weekOf: ts.week_start_date,
-            totalHours: totalH,
-            hours: ts.rows?.[0]?.hours || { Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0 } // simplified
-          };
-        });
-        setTimesheets(formatted);
-      }
-    } catch (e) { console.error(e); }
-  };
+  const { data: rawTimesheets = [], mutate: mutateTimesheets } = useSWR('/api/timesheets/pending', fetcher);
+  const timesheets = rawTimesheets.map(ts => {
+    let totalH = 0;
+    (ts.rows || []).forEach(r => {
+      totalH += Object.values(r.hours || {}).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
+    });
+    return {
+      id: ts.id,
+      employee: getEmpName(ts.employee_id),
+      employee_id: ts.employee_id,
+      weekOf: ts.week_start_date,
+      totalHours: totalH,
+      hours: ts.rows?.[0]?.hours || { Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0 }
+    };
+  });
 
-  React.useEffect(() => {
-    if (teamMembers.length === 0) return;
-    if (activeTab === 'leave') fetchLeaves();
-    if (activeTab === 'corrections') fetchCorrections();
-    if (activeTab === 'expense') fetchExpenses();
-    if (activeTab === 'wfh') fetchWfhs();
-    if (activeTab === 'timesheet') fetchTimesheets();
-  }, [activeTab, teamMembers]);
-
-  const [expenses, setExpenses] = useState([]);
-
-  const fetchExpenses = async () => {
-    try {
-      const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch('/api/team-lead/expenses/pending', { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const formatted = data.map(c => {
-          const empId = c.user_id || c.employee_id;
-          return {
-            id: c.id,
-            employee: getEmpName(empId),
-            employee_id: empId,
-            category: c.category || 'Other',
-            amount: c.amount || 0,
-            date: c.claim_date || c.date || '',
-            description: c.description || '',
-            receiptName: c.receipt_url || c.receiptName || 'receipt.pdf',
-            status: c.tl_approval || 'pending'
-          };
-        });
-        setExpenses(formatted);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const [timesheets, setTimesheets] = useState([]);
-  const [wfhs, setWfhs] = useState([]);
+  const { data: rawExpenses = [], mutate: mutateExpenses } = useSWR('/api/team-lead/expenses/pending', fetcher);
+  const expenses = rawExpenses.map(c => {
+    const empId = c.user_id || c.employee_id;
+    return {
+      id: c.id,
+      employee: getEmpName(empId),
+      employee_id: empId,
+      category: c.category || 'Other',
+      amount: c.amount || 0,
+      date: c.claim_date || c.date || '',
+      description: c.description || '',
+      receiptName: c.receipt_url || c.receiptName || 'receipt.pdf',
+      status: c.tl_approval || 'pending'
+    };
+  });
 
   const [selectedId, setSelectedId] = useState(null);
 
@@ -168,21 +99,21 @@ const Approvals = () => {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        fetchLeaves();
+        mutateLeaves();
       } else if (activeTab === 'corrections') {
         const action = actionType === 'approve' ? 'approve' : 'reject';
         await fetch(`/api/team-lead/attendance-corrections/${id}/${action}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        fetchCorrections();
+        mutateCorrections();
       } else if (activeTab === 'expense') {
         const action = actionType === 'approve' ? 'approve' : 'reject';
         await fetch(`/api/team-lead/expenses/${id}/${action}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        fetchExpenses();
+        mutateExpenses();
       } else if (activeTab === 'timesheet') {
         const action = actionType === 'approve' ? 'approve' : 'reject';
         const body = actionType === 'reject' ? JSON.stringify({ comment: 'Rejected by TL from approvals' }) : null;
@@ -194,14 +125,14 @@ const Approvals = () => {
           },
           body
         });
-        fetchTimesheets();
+        mutateTimesheets();
       } else if (activeTab === 'wfh') {
         const action = actionType === 'approve' ? 'approve' : 'reject';
         await fetch(`/api/team-lead/wfh/${id}/${action}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        fetchWfhs();
+        mutateWfhs();
       }
       if (selectedId === id) setSelectedId(null);
     } catch (e) {
