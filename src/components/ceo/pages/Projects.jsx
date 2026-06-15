@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { 
-  Search, CheckCircle, AlertTriangle, Clock, Target, Plus, RefreshCw, AlertCircle
+  Search, CheckCircle, AlertTriangle, Clock, Target, Plus, RefreshCw, AlertCircle, X
 } from 'lucide-react';
 import '../CEO.css';
 
@@ -121,7 +121,7 @@ export default function Projects() {
       });
       if (!res.ok) throw new Error('Create failed');
       const created = await res.json();
-      setProjects(prev => [created, ...prev]);
+      mutateProjects();
       setShowCreateModal(false);
       setNewProject({ name: '', client: '', budget: '', used: '', status: 'Active', deadline: '' });
     } catch (err) {
@@ -139,7 +139,7 @@ export default function Projects() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Delete failed');
-      setProjects(prev => prev.filter(p => p.id !== id));
+      mutateProjects();
       alert('Project deleted successfully.');
     } catch (err) {
       alert('Failed to delete project: ' + err.message);
@@ -279,8 +279,9 @@ export default function Projects() {
       {signoffProject && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="ceo-command-panel" style={{ width: '500px', maxWidth: '90vw' }}>
-            <div className="ceo-command-header">
+            <div className="ceo-command-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div className="ceo-typography-section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={20} color="var(--ceo-success)"/> Executive Sign-off</div>
+              <button onClick={() => { setSignoffProject(null); setSignature(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ceo-text-muted)' }}><X size={20} /></button>
             </div>
             <div className="ceo-command-content">
               <div style={{ marginBottom: '24px' }}>
@@ -344,8 +345,9 @@ export default function Projects() {
       {editProject && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="ceo-command-panel" style={{ width: '500px', maxWidth: '90vw' }}>
-            <div className="ceo-command-header">
+            <div className="ceo-command-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div className="ceo-typography-section-title">Modify Project Details</div>
+              <button onClick={() => setEditProject(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ceo-text-muted)' }}><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveEdit} className="ceo-command-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
@@ -397,18 +399,19 @@ export default function Projects() {
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="ceo-command-panel" style={{ width: '500px', maxWidth: '90vw' }}>
-            <div className="ceo-command-header">
+            <div className="ceo-command-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div className="ceo-typography-section-title">Add New Project</div>
+              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ceo-text-muted)' }}><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateProject} className="ceo-command-content" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label className="ceo-typography-meta">Project Name</label>
-                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} placeholder="e.g. NSG ERP Phase 2" />
+                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} placeholder="Enter project name" />
               </div>
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Client</label>
-                  <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.client} onChange={e => setNewProject({...newProject, client: e.target.value})} placeholder="e.g. Internal" />
+                  <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.client} onChange={e => setNewProject({...newProject, client: e.target.value})} placeholder="Enter client name" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Status</label>
@@ -422,16 +425,16 @@ export default function Projects() {
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Total Budget (₹)</label>
-                  <input required type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.budget} onChange={e => setNewProject({...newProject, budget: e.target.value})} placeholder="e.g. 1000000" />
+                  <input required type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.budget} onChange={e => setNewProject({...newProject, budget: e.target.value})} placeholder="Enter total budget" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Used Budget (₹)</label>
-                  <input type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.used} onChange={e => setNewProject({...newProject, used: e.target.value})} placeholder="0" />
+                  <input type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.used} onChange={e => setNewProject({...newProject, used: e.target.value})} placeholder="Enter used budget" />
                 </div>
               </div>
               <div>
                 <label className="ceo-typography-meta">Deadline</label>
-                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.deadline} onChange={e => setNewProject({...newProject, deadline: e.target.value})} placeholder="e.g. Dec 31, 2026" />
+                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.deadline} onChange={e => setNewProject({...newProject, deadline: e.target.value})} placeholder="Enter deadline (e.g. Dec 31, 2026)" />
               </div>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
                 <button type="button" className="ceo-btn" onClick={() => setShowCreateModal(false)}>Cancel</button>
