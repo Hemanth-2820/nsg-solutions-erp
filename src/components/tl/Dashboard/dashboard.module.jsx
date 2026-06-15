@@ -47,7 +47,7 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
       const [membersRes, tasksRes, annRes, countsRes, alertsRes, leavesRes, correctionsRes, wfhRes] = await Promise.all([
         fetch('/api/team-lead/team-members', { headers }),
         fetch('/api/team-lead/tasks', { headers }),
-        fetch('/api/tl-portal/announcements', { headers }),
+        fetch('/api/team-lead/announcements', { headers }),
         fetch('/api/team-lead/dashboard/pending-approvals', { headers }),
         fetch('/api/team-lead/dashboard/absent-alerts', { headers }),
         fetch('/api/team-lead/leaves/pending', { headers }),
@@ -55,7 +55,11 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
         fetch('/api/team-lead/wfh/pending', { headers })
       ]);
 
-      if (annRes.ok) setAnnouncements(await annRes.json());
+      if (annRes.ok) {
+        let anns = await annRes.json();
+        anns = anns.filter(ann => ann.audience === 'All Portals' || ann.audience === 'TL Portal');
+        setAnnouncements(anns);
+      }
       
       let fetchedMembers = [];
       if (membersRes.ok) {
@@ -338,7 +342,7 @@ const Dashboard = ({ setActiveTab, setSelectedChatUser }) => {
                 borderRadius: '8px', padding: '16px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>{ann.author} • {ann.date}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>{ann.author} • {new Date(ann.created_at).toLocaleDateString()}</span>
                   {ann.priority === 'Urgent' && <span style={{ background: '#FEF2F2', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800 }}>URGENT</span>}
                 </div>
                 <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#0F172A' }}>{ann.title}</div>

@@ -42,7 +42,8 @@ export function HrDashboardView() {
         // Fetch announcements
         const annRes = await fetch('/api/hr-portal/announcements', { headers });
         if (annRes.ok) {
-          const anns = await annRes.json();
+          let anns = await annRes.json();
+          anns = anns.filter(ann => ann.audience === 'All Portals' || ann.audience === 'HR Portal');
           setAnnouncements(anns);
         }
       } catch (err) {
