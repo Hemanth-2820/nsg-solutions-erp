@@ -34,6 +34,13 @@ class User(Base):
     dob = Column(Date, nullable=True)
     gender = Column(String, nullable=True)
     address = Column(Text, nullable=True)
+    
+    # Payroll & PDF Details
+    pan_number = Column(String, nullable=True)
+    pf_number = Column(String, nullable=True)
+    uan = Column(String, nullable=True)
+    esi_number = Column(String, nullable=True)
+    location = Column(String, nullable=True)
     emergency_contact_name = Column(String, nullable=True)
     emergency_contact_phone = Column(String, nullable=True)
     shift_timing = Column(String, nullable=True)
@@ -244,6 +251,13 @@ class Payslip(Base):
     lop = Column(Float, default=0.0)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
+    
+    # PDF Fields
+    worked_days = Column(Float, nullable=True)
+    arrear_days = Column(Float, nullable=True, default=0.0)
+    lop_days = Column(Float, nullable=True, default=0.0)
+    lop_days_reversed = Column(Float, nullable=True, default=0.0)
+    
     status = Column(String, default="pending")  # pending, paid
     payment_method = Column(String, nullable=True)
     transaction_ref = Column(String, nullable=True)
