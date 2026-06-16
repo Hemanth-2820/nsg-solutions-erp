@@ -1,0 +1,2 @@
+This is a test document to verify the task attachment upload feature.
+It should support uploading images, PDFs, documents, and text files.
