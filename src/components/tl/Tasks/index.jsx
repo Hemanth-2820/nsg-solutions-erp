@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import useSWR from 'swr';
 import AvatarFallback from '../../common/AvatarFallback';
 import styles from './tasks.module.css';
@@ -6,6 +6,7 @@ import { PlusSquare, List, XCircle, GitPullRequest, Edit, UserPlus, RotateCcw, C
 
 export default function Tasks({ currentUser }) {
   const [activeView, setActiveView] = useState('create'); // 'create', 'list', 'rejected', 'pr'
+  const previousViewRef = useRef('list'); // ref so async closures always read the latest value
   const [subtasks, setSubtasks] = useState(['']);
   const [groupBy, setGroupBy] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -38,16 +39,17 @@ export default function Tasks({ currentUser }) {
   const [taskAssignee, setTaskAssignee] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskProject, setTaskProject] = useState('');
-  const [taskSprint, setTaskSprint] = useState('Backlog');
+  const [taskProjectId, setTaskProjectId] = useState(null);
+  const [taskSprint, setTaskSprint] = useState('');
   const [taskAcceptance, setTaskAcceptance] = useState('');
   const [taskDue, setTaskDue] = useState('');
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [taskAttachments, setTaskAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [statusNotes, setStatusNotes] = useState({});
+  const [statusAttachments, setStatusAttachments] = useState({});
 
-  React.useEffect(() => {
-    if (projectsData && projectsData.length > 0 && !taskProject) {
-      setTaskProject(projectsData[0].name);
-    }
-  }, [projectsData, taskProject]);
+  // Do not auto-select first project — let user choose
 
 
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
@@ -58,7 +60,48 @@ export default function Tasks({ currentUser }) {
   const [rejectTaskId, setRejectTaskId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
+    if (taskAttachments.length + files.length > 10) {
+      alert("You can upload a maximum of 10 files per task.");
+      return;
+    }
+
+    setUploading(true);
+    const uploaded = [];
+    const token = localStorage.getItem('nsg_jwt_token');
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/team-lead/tasks/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          uploaded.push({ filename: data.filename, file_url: data.file_url });
+        } else {
+          alert(`Failed to upload ${file.name}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert(`Error uploading ${file.name}`);
+      }
+    }
+    setTaskAttachments(prev => [...prev, ...uploaded]);
+    setUploading(false);
+  };
+
+  const removeAttachment = (index) => {
+    setTaskAttachments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleAddSubtask = () => setSubtasks([...subtasks, '']);
   const handleRemoveSubtask = (index) => setSubtasks(subtasks.filter((_, i) => i !== index));
@@ -69,17 +112,32 @@ export default function Tasks({ currentUser }) {
   };
 
   const handleEditTask = (task) => {
-    setTaskTitle(task.title);
-    setTaskDescription(task.description);
-    setTaskProject(task.project);
-    setTaskSprint(task.sprint);
-    setTaskPriority(task.priority);
-    setTaskAssignee(task.user_id || '');
-    setTaskPoints(task.sp || '');
-    setTaskDue(task.due || '');
-    setTaskAcceptance(task.acceptance ? task.acceptance.join('\n') : '');
-    setSubtasks(task.subtasks && task.subtasks.length > 0 ? task.subtasks.map(s => s.title) : ['']);
-    setEditingTaskId(task.id);
+    const rawTask = tasks.find(t => t.id === task.id) || task;
+    setTaskTitle(rawTask.title);
+    setTaskDescription(rawTask.description || '');
+    setTaskProject(rawTask.project);
+    const matchedProj = projectsData.find(p => p.name === rawTask.project);
+    setTaskProjectId(matchedProj ? matchedProj.id : null);
+    setTaskSprint(rawTask.sprint);
+    // Standardize priority casing
+    const originalPriority = rawTask.priority || 'Medium';
+    setTaskPriority(originalPriority.charAt(0).toUpperCase() + originalPriority.slice(1));
+    setTaskAssignee(rawTask.user_id || '');
+    setTaskPoints(rawTask.sp || '');
+    setTaskDue(rawTask.due || '');
+    setTaskAcceptance(rawTask.acceptance ? rawTask.acceptance.join('\n') : '');
+    setSubtasks(rawTask.subtasks && rawTask.subtasks.length > 0 ? rawTask.subtasks.map(s => s.title) : ['']);
+    setTaskAttachments(rawTask.attachments || []);
+    try {
+      const data = rawTask.custom_data ? JSON.parse(rawTask.custom_data) : {};
+      setStatusNotes(data.status_notes || {});
+      setStatusAttachments(data.status_attachments || {});
+    } catch(e) {
+      setStatusNotes({});
+      setStatusAttachments({});
+    }
+    setEditingTaskId(rawTask.id);
+    previousViewRef.current = activeView; // remember current tab before switching to edit form
     setActiveView('create');
   };
 
@@ -155,6 +213,19 @@ export default function Tasks({ currentUser }) {
       return;
     }
     const priorityVal = taskPriority.toLowerCase();
+    let currentCustom = {};
+    if (editingTaskId) {
+      const existingTask = tasks.find(t => t.id === editingTaskId);
+      try {
+        currentCustom = existingTask.custom_data ? JSON.parse(existingTask.custom_data) : {};
+      } catch(e) {}
+    }
+    const updatedCustom = {
+      ...currentCustom,
+      status_notes: statusNotes,
+      status_attachments: statusAttachments
+    };
+
     const payload = {
       project: taskProject,
       sprint: taskSprint,
@@ -165,7 +236,9 @@ export default function Tasks({ currentUser }) {
       due: taskDue || new Date().toISOString().split('T')[0],
       assignee_id: parseInt(taskAssignee),
       subtasks: subtasks.filter(t => t.trim() !== ''),
-      acceptance: taskAcceptance.split('\n').map(a => a.trim().replace(/^- /, '')).filter(a => a !== '')
+      acceptance: taskAcceptance.split('\n').map(a => a.trim().replace(/^- /, '')).filter(a => a !== ''),
+      attachments: taskAttachments,
+      custom_data: JSON.stringify(updatedCustom)
     };
     try {
       const token = localStorage.getItem('nsg_jwt_token');
@@ -191,7 +264,11 @@ export default function Tasks({ currentUser }) {
         setTaskDue('');
         setTaskAcceptance('');
         setEditingTaskId(null);
-        setActiveView('list');
+        setTaskAttachments([]);
+        setStatusNotes({});
+        setStatusAttachments({});
+        // Return to the tab the user was on before editing; for new tasks go to list
+        setActiveView(editingTaskId ? previousViewRef.current : 'list');
         mutateTasks();
         if (window.toast) window.toast.success(editingTaskId ? "Task updated successfully!" : "Task created successfully!");
         else alert(editingTaskId ? "Task updated successfully!" : "Task created successfully!");
@@ -357,7 +434,12 @@ export default function Tasks({ currentUser }) {
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Project</label>
-                <select className={styles.formSelect} value={taskProject} onChange={(e) => setTaskProject(e.target.value)}>
+                <select className={styles.formSelect} value={taskProject} onChange={(e) => {
+                  const selectedProj = projectsData.find(p => p.name === e.target.value);
+                  setTaskProject(e.target.value);
+                  setTaskProjectId(selectedProj ? selectedProj.id : null);
+                  setTaskSprint('Backlog');
+                }}>
                   <option value="">Select Project...</option>
                   {projectsData.map(proj => (
                     <option key={proj.id} value={proj.name}>{proj.name}</option>
@@ -367,12 +449,21 @@ export default function Tasks({ currentUser }) {
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Sprint ID</label>
                 <select className={styles.formSelect} value={taskSprint} onChange={(e) => setTaskSprint(e.target.value)}>
+                  <option value="">Select Sprint ID...</option>
                   <option value="Backlog">Backlog</option>
-                  {savedSprints.map(s => (
-                    <option key={s.id} value={s.sprintId || s.name}>
-                      {s.name} ({s.sprintId || `SPR-${s.id}`})
-                    </option>
-                  ))}
+                  {(() => {
+                    const filteredSprints = taskProjectId
+                      ? savedSprints.filter(s => s.project_id === taskProjectId)
+                      : savedSprints;
+                    if (filteredSprints.length === 0 && taskProjectId) {
+                      return <option disabled value="">No sprints for this project</option>;
+                    }
+                    return filteredSprints.map(s => (
+                      <option key={s.id} value={s.sprintId || s.name}>
+                        {s.name} ({s.sprintId || `SPR-${s.id}`})
+                      </option>
+                    ));
+                  })()}
                 </select>
               </div>
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
@@ -397,18 +488,222 @@ export default function Tasks({ currentUser }) {
                 <label className={styles.formLabel}>Acceptance Criteria</label>
                 <textarea className={styles.formTextarea} placeholder="- Given... When... Then..." value={taskAcceptance} onChange={(e) => setTaskAcceptance(e.target.value)}></textarea>
               </div>
-              <button className={styles.submitBtn} onClick={handleCreateTask}>{editingTaskId ? "Update Task" : "Create Task"}</button>
+              <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                <label className={styles.formLabel}>Requirement Attachments (Images, PDFs, Docs, Text - Up to 10 files)</label>
+                <input
+                  type="file"
+                  multiple
+                  disabled={uploading}
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                  id="tl-task-file-input"
+                />
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '8px' }}>
+                  <label htmlFor="tl-task-file-input" className={styles.addSubtaskBtn} style={{ cursor: 'pointer', margin: 0 }}>
+                    {uploading ? 'Uploading...' : 'Choose Files'}
+                  </label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    {taskAttachments.length} / 10 files uploaded
+                  </span>
+                </div>
+                {taskAttachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                    {taskAttachments.map((file, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '4px', backgroundColor: '#f1f5f9', border: '1px solid var(--border-card)' }}>
+                        <a
+                          href={file.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none', color: 'var(--primary)' }}
+                        >
+                          {file.filename}
+                        </a>
+                        <button type="button" onClick={() => removeAttachment(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {editingTaskId && (
+                <div className={`${styles.formGroup} ${styles.fullWidth}`} style={{ marginTop: '20px', borderTop: '1px solid var(--border-card)', paddingTop: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px', color: 'var(--text-main)' }}>Status Descriptions & Phase Attachments</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {['pending', 'in-progress', 'testing', 'pr', 'blocked'].map(stKey => {
+                      const label = {
+                        'pending': 'Todo',
+                        'in-progress': 'In-Progress',
+                        'testing': 'Testing',
+                        'pr': 'PR',
+                        'blocked': 'Reject / Blocked'
+                      }[stKey];
+
+                      return (
+                        <div key={stKey} style={{ border: '1px solid var(--border-card)', borderRadius: '8px', padding: '16px', backgroundColor: '#f8fafc' }}>
+                          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: 'var(--primary)' }}>{label} Phase</h4>
+                          
+                          {/* Notes */}
+                          <div className={styles.formGroup} style={{ marginBottom: '12px' }}>
+                            <label className={styles.formLabel}>Notes</label>
+                            <textarea
+                              className={styles.formTextarea}
+                              placeholder={`Enter notes for ${label} status...`}
+                              value={statusNotes[stKey] || (stKey === 'pending' ? statusNotes['todo'] : stKey === 'blocked' ? statusNotes['reject'] : '') || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setStatusNotes(prev => {
+                                  const updated = { ...prev, [stKey]: val };
+                                  if (stKey === 'pending') updated.todo = val;
+                                  if (stKey === 'blocked') updated.reject = val;
+                                  return updated;
+                                });
+                              }}
+                            />
+                          </div>
+
+                          {/* Attachments */}
+                          <div className={styles.formGroup}>
+                            <label className={styles.formLabel}>Attachments ({(statusAttachments[stKey] || []).length} / 10)</label>
+                            
+                            {/* File List */}
+                            {(statusAttachments[stKey] || []).length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                                {(statusAttachments[stKey] || []).map((file, idx) => (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '4px', backgroundColor: '#fff', border: '1px solid var(--border-card)' }}>
+                                    <a
+                                      href={file.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none', color: 'var(--primary)' }}
+                                    >
+                                      {file.filename}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setStatusAttachments(prev => {
+                                          const currentList = prev[stKey] || [];
+                                          const updatedList = currentList.filter((_, i) => i !== idx);
+                                          return { ...prev, [stKey]: updatedList };
+                                        });
+                                      }}
+                                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Uploader */}
+                            <input
+                              type="file"
+                              multiple
+                              id={`tl-upload-${stKey}`}
+                              style={{ display: 'none' }}
+                              onChange={async (e) => {
+                                const files = Array.from(e.target.files);
+                                if (files.length === 0) return;
+                                
+                                const currentList = statusAttachments[stKey] || [];
+                                if (currentList.length + files.length > 10) {
+                                  alert("You can upload a maximum of 10 files per status.");
+                                  return;
+                                }
+
+                                const token = localStorage.getItem('nsg_jwt_token');
+                                const uploaded = [...currentList];
+
+                                for (const file of files) {
+                                  const formData = new FormData();
+                                  formData.append('file', file);
+                                  try {
+                                    const res = await fetch('/api/team-lead/tasks/upload', {
+                                      method: 'POST',
+                                      headers: { 'Authorization': `Bearer ${token}` },
+                                      body: formData
+                                    });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      uploaded.push({ filename: data.filename, file_url: data.file_url });
+                                    } else {
+                                      alert(`Failed to upload ${file.name}`);
+                                    }
+                                  } catch (err) {
+                                    console.error(err);
+                                    alert(`Error uploading ${file.name}`);
+                                  }
+                                }
+
+                                setStatusAttachments(prev => ({
+                                  ...prev,
+                                  [stKey]: uploaded
+                                }));
+                              }}
+                            />
+                            <label htmlFor={`tl-upload-${stKey}`} className={styles.addSubtaskBtn} style={{ cursor: 'pointer', margin: 0, padding: '6px 12px', fontSize: '0.75rem', alignSelf: 'flex-start' }}>
+                              📎 Add Attachment
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                <button className={styles.submitBtn} style={{ marginTop: 0 }} onClick={handleCreateTask}>{editingTaskId ? "Update Task" : "Create Task"}</button>
+                {editingTaskId && (
+                  <button
+                    type="button"
+                    className={styles.actionBtn}
+                    style={{ height: '48px', padding: '0 24px' }}
+                    onClick={() => {
+                      setEditingTaskId(null);
+                      setTaskTitle('');
+                      setTaskDescription('');
+                      setTaskAssignee('');
+                      setTaskPoints('');
+                      setTaskDue('');
+                      setTaskAcceptance('');
+                      setTaskAttachments([]);
+                      setStatusNotes({});
+                      setStatusAttachments({});
+                      setSubtasks(['']);
+                    }}
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {(activeView === 'list' || activeView === 'todo' || activeView === 'inprogress' || activeView === 'testing') && (() => {
-          const statusTitles = { list: 'Sprint Backlog Overview', todo: 'Todo Tasks', inprogress: 'In-Progress Tasks', testing: 'Testing Tasks' };
+        {(activeView === 'list' || activeView === 'todo' || activeView === 'inprogress' || activeView === 'testing' || activeView === 'rejected' || activeView === 'pr') && (() => {
+          const statusTitles = {
+            list:       'Sprint Backlog Overview — All Tasks',
+            todo:       'Todo Tasks',
+            inprogress: 'In-Progress Tasks',
+            testing:    'Testing Tasks',
+            rejected:   'Rejected / Requires Rework',
+            pr:         'PR Review'
+          };
 
-          // Apply status filter from Group By dropdown (only in list view)
-          const applyStatusFilter = (list) => {
+          // Filter tasks per active tab
+          const baseList =
+            activeView === 'todo'       ? taskList.filter(t => t.status === 'To Do')
+            : activeView === 'inprogress' ? taskList.filter(t => t.status === 'In Progress')
+            : activeView === 'testing'    ? taskList.filter(t => t.status === 'testing')
+            : activeView === 'rejected'   ? taskList.filter(t => t.status === 'Blocked')
+            : activeView === 'pr'         ? taskList.filter(t => t.status === 'pr')
+            : taskList; // 'list' = All
+
+          // Extra group-by filter only for the 'All' list view
+          const applyGroupFilter = (list) => {
             if (activeView !== 'list') return list;
-            if (groupBy === 'All')         return list;
             if (groupBy === 'Todo')        return list.filter(t => t.status === 'To Do');
             if (groupBy === 'In-Progress') return list.filter(t => t.status === 'In Progress');
             if (groupBy === 'Testing')     return list.filter(t => t.status === 'testing');
@@ -417,13 +712,17 @@ export default function Tasks({ currentUser }) {
             return list;
           };
 
-          const baseList = activeView === 'list' ? taskList
-            : activeView === 'todo'        ? taskList.filter(t => t.status === 'To Do')
-            : activeView === 'inprogress'  ? taskList.filter(t => t.status === 'In Progress')
-            : activeView === 'testing'     ? taskList.filter(t => t.status === 'testing')
-            : taskList;
+          const viewFilteredList = applyGroupFilter(baseList);
 
-          const viewFilteredList = applyStatusFilter(baseList);
+          // Status badge style helper
+          const getStatusBadgeStyle = (status) => {
+            if (status === 'To Do')      return { background: '#e0f2fe', color: '#0369a1' };
+            if (status === 'In Progress') return { background: '#ede9fe', color: '#7c3aed' };
+            if (status === 'testing')    return { background: '#fef9c3', color: '#854d0e' };
+            if (status === 'Blocked')    return { background: '#fee2e2', color: '#ef4444' };
+            if (status === 'pr')         return { background: '#dcfce7', color: '#166534' };
+            return { background: '#f1f5f9', color: '#475569' };
+          };
 
           return (
             <div>
@@ -474,8 +773,13 @@ export default function Tasks({ currentUser }) {
                           </span>
                         </td>
                         <td>
-                          <span className={`${styles.badge} ${task.status === 'Done' ? styles.badgeDone : task.status === 'In Progress' ? styles.badgeProgress : styles.badgeTodo}`}>
-                            {task.status}
+                          <span className={styles.badge} style={getStatusBadgeStyle(task.status)}>
+                            {task.status === 'To Do' ? 'TODO'
+                              : task.status === 'In Progress' ? 'IN-PROGRESS'
+                              : task.status === 'testing' ? 'TESTING'
+                              : task.status === 'Blocked' ? 'REJECT'
+                              : task.status === 'pr' ? 'PR'
+                              : task.status.toUpperCase()}
                           </span>
                         </td>
                         <td style={{ fontWeight: 600 }}>{task.points}</td>
@@ -483,7 +787,14 @@ export default function Tasks({ currentUser }) {
                         <td>
                           <div className={styles.actionGroup}>
                             <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => handleEditTask(task)}><Edit size={12}/> Edit</button>
-                            <button className={`${styles.actionBtn}`} onClick={() => handleReassignTask(task.id)}><UserPlus size={12}/> Reassign</button>
+                            {activeView === 'pr' ? (
+                              <>
+                                <button className={`${styles.actionBtn} ${styles.success}`} onClick={() => handleApprovePr(task.id)}><Check size={12}/> Approve</button>
+                                <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => handleRejectPr(task.id)}><X size={12}/> Reject</button>
+                              </>
+                            ) : (
+                              <button className={`${styles.actionBtn}`} onClick={() => handleReassignTask(task.id)}><UserPlus size={12}/> Reassign</button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -497,99 +808,6 @@ export default function Tasks({ currentUser }) {
             </div>
           );
         })()}
-
-        {activeView === 'rejected' && (
-          <div>
-            <div className={styles.sectionTitle}>Requires Rework & Fixes</div>
-            <div className={styles.dataTableWrapper}>
-              <table className={styles.dataTable}>
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Task Title</th>
-                    <th>Assignee</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Points</th>
-                    <th>Due Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rejectedTasks.length === 0 && (
-                    <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>No rejected tasks.</td></tr>
-                  )}
-                  {rejectedTasks.map(task => (
-                    <tr key={task.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{task.project}</td>
-                      <td className={styles.taskTitle}>{task.title}</td>
-                      <td>
-                        <div className={styles.assigneeCell}>
-                          <AvatarFallback name={task.assignee} size="24px" />
-                          {task.assignee}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`${styles.badge} ${styles['badge' + task.priority]}`}>{task.priority}</span>
-                      </td>
-                      <td>
-                        <span className={`${styles.badge} ${styles.badgeTodo}`} style={{ background: '#fee2e2', color: '#ef4444' }}>{task.status}</span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{task.points}</td>
-                      <td>{task.due}</td>
-                      <td>
-                        <div className={styles.actionGroup}>
-                          <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => handleEditTask(task)}>
-                            <RotateCcw size={12}/> Reopen & Edit
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeView === 'pr' && (
-          <div>
-            <div className={styles.sectionTitle}>Pending Pull Requests</div>
-            <div className={styles.dataTableWrapper}>
-              <table className={styles.dataTable}>
-                <thead>
-                  <tr>
-                    <th>Task Title</th>
-                    <th>PR Link</th>
-                    <th>Author</th>
-                    <th>Due Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {prReviews.map(pr => (
-                    <tr key={pr.id}>
-                      <td className={styles.taskTitle}>{pr.title}</td>
-                      <td>
-                        <a href={pr.prUrl} target="_blank" rel="noopener noreferrer" className={styles.prLink}>
-                          {pr.prUrl}
-                        </a>
-                      </td>
-                      <td>{pr.author}</td>
-                      <td>{pr.due}</td>
-                      <td>
-                        <div className={styles.actionGroup}>
-                          <button className={`${styles.actionBtn} ${styles.success}`} onClick={() => handleApprovePr(pr.id)}><Check size={12}/> Approve PR</button>
-                          <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => handleRejectPr(pr.id)}><X size={12}/> Request Changes</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
         {reassignModalOpen && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>

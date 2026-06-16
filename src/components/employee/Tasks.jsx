@@ -237,17 +237,10 @@ function DynamicCustomForm({ task, schema, onUpdate, onClose }) {
 
   function handleSubmit() {
     setLoading(true);
-    // Auto-advance to next status on Save
-    const nextStatus = {
-      'pending':     'in-progress',
-      'todo':        'in-progress',
-      'in-progress': 'testing',
-      'testing':     'pr',
-    }[task.status] || task.status; // pr/reject stay as-is
-
+    // Save custom field data only — do NOT auto-advance status
     setTimeout(() => { 
       setLoading(false); 
-      onUpdate(task.id, { customData: JSON.stringify(customData), status: nextStatus }); 
+      onUpdate(task.id, { customData: JSON.stringify(customData) }); 
       if (onClose) onClose();
     }, 800);
   }
@@ -288,14 +281,136 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
   const [subtasks, setSubtasks]     = useState(task.subtasks);
   const [acChecked, setAcChecked]   = useState([]);
   const [status, setStatus]         = useState(task.status);
+  const [attachmentsList, setAttachmentsList] = useState(task.attachments || []);
+  const [statusNotes, setStatusNotes] = useState({});
+  const [statusAttachments, setStatusAttachments] = useState({});
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [uploadingStatusAtt, setUploadingStatusAtt] = useState(false);
   const panelRef = useRef(null);
 
   useEffect(() => {
     setSubtasks(task.subtasks || []);
     setStatus(task.status);
     setAcChecked([]);
-  }, [task.id, task.subtasks, task.status]);
+    setAttachmentsList(task.attachments || []);
+    try {
+      const data = task.customData ? JSON.parse(task.customData) : {};
+      setStatusNotes(data.status_notes || {});
+      setStatusAttachments(data.status_attachments || {});
+    } catch(e) {
+      setStatusNotes({});
+      setStatusAttachments({});
+    }
+  }, [task.id]); // Only reset panel state when switching to a different task, not on every prop update
 
+  const handleStatusNotesChange = (key, value) => {
+    setStatusNotes(prev => ({ ...prev, [key]: value }));
+  };
+
+  const saveStatusNotesAndAttachments = async (updatedAttachments = statusAttachments) => {
+    setSavingNotes(true);
+    const token = localStorage.getItem('nsg_jwt_token');
+    try {
+      let currentCustomData = {};
+      try {
+        currentCustomData = task.customData ? JSON.parse(task.customData) : {};
+      } catch(e) {}
+      
+      const updatedCustomData = {
+        ...currentCustomData,
+        status_notes: {
+          ...currentCustomData.status_notes,
+          ...statusNotes
+        },
+        status_attachments: {
+          ...currentCustomData.status_attachments,
+          ...updatedAttachments
+        }
+      };
+
+      const res = await fetch(`/api/employee-portal/tasks/${task.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: status,          // use local status state (user's selected status), NOT task.status prop (server value)
+          custom_data: JSON.stringify(updatedCustomData)
+        })
+      });
+      if (res.ok) {
+        onUpdate(task.id, { customData: JSON.stringify(updatedCustomData) });
+        if (window.toast) window.toast.success("Notes saved successfully!");
+      } else {
+        alert("Failed to save notes");
+      }
+    } catch(err) {
+      console.error(err);
+      alert("Error saving notes");
+    }
+    setSavingNotes(false);
+  };
+
+  const handleStatusFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const currentList = statusAttachments[status] || [];
+    if (currentList.length + files.length > 10) {
+      alert("You can upload a maximum of 10 files per status.");
+      return;
+    }
+
+    setUploadingStatusAtt(true);
+    const token = localStorage.getItem('nsg_jwt_token');
+    const uploaded = [...currentList];
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const resUpload = await fetch('/api/employee-portal/tasks/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+        if (resUpload.ok) {
+          const fileData = await resUpload.json();
+          uploaded.push({ filename: fileData.filename, file_url: fileData.file_url });
+        } else {
+          alert(`Failed to upload ${file.name}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert(`Error uploading ${file.name}`);
+      }
+    }
+
+    const updatedAttachments = {
+      ...statusAttachments,
+      [status]: uploaded
+    };
+    setStatusAttachments(updatedAttachments);
+    await saveStatusNotesAndAttachments(updatedAttachments);
+    setUploadingStatusAtt(false);
+  };
+
+  const handleStatusFileDelete = async (idxToDelete) => {
+    if (!window.confirm("Are you sure you want to delete this attachment?")) return;
+
+    const currentList = statusAttachments[status] || [];
+    const updatedList = currentList.filter((_, idx) => idx !== idxToDelete);
+
+    const updatedAttachments = {
+      ...statusAttachments,
+      [status]: updatedList
+    };
+    setStatusAttachments(updatedAttachments);
+    await saveStatusNotesAndAttachments(updatedAttachments);
+  };
   function toggleSubtask(id) {
     const updated = subtasks.map(s => s.id === id ? { ...s, done: !s.done } : s);
     setSubtasks(updated);
@@ -308,6 +423,7 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
 
   function changeStatus(s) {
     setStatus(s);
+    // Only update the status — notes/attachments are saved separately via "Save Notes" button
     onUpdate(task.id, { status: s });
   }
 
@@ -337,8 +453,38 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
         <div className="tk-detail-section-label">Description</div>
         <p className="tk-detail-desc">{task.description}</p>
 
+        {/* Attachments */}
+        <div className="tk-detail-section-label" style={{ marginTop: 16 }}>Requirement Attachments ({attachmentsList.length})</div>
+        <div className="tk-attachments-section">
+          {attachmentsList.length > 0 ? (
+            <div className="tk-attachments-list">
+              {attachmentsList.map(att => {
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.file_url);
+                return (
+                  <div key={att.id} className="tk-attachment-card">
+                    <div className="tk-attachment-card-content">
+                      {isImage ? (
+                        <div className="tk-attachment-preview-container">
+                          <img src={att.file_url} alt={att.filename} className="tk-attachment-preview" />
+                        </div>
+                      ) : (
+                        <div className="tk-attachment-doc-icon">📄</div>
+                      )}
+                      <a href={att.file_url} target="_blank" rel="noreferrer" className="tk-attachment-link" title={att.filename}>
+                        {att.filename}
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="tk-empty-state" style={{ marginBottom: 8 }}>No attachments uploaded yet.</div>
+          )}
+        </div>
+
         {/* Status change */}
-        <div className="tk-detail-section-label" style={{ marginTop: 16 }}>Update Status</div>
+        <div className="tk-detail-section-label" style={{ marginTop: 24 }}>Update Status</div>
         <div className="tk-status-row">
           {STATUSES.map(s => (
             <button
@@ -352,6 +498,81 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
           ))}
         </div>
 
+        {/* Status Notes */}
+        {(status === 'pending' || status === 'todo' || status === 'in-progress' || status === 'testing' || status === 'blocked' || status === 'reject' || status === 'pr') && (
+          <div style={{ marginTop: 20 }}>
+            <div className="tk-detail-section-label" style={{ marginBottom: 6 }}>
+              {status === 'pending' || status === 'todo' ? 'Todo Status Notes / Description' :
+               status === 'in-progress' ? 'In-Progress Status Notes / Description' :
+               status === 'testing' ? 'Testing Status Notes / Description' :
+               status === 'pr' ? 'PR Status Notes / Description' : 'Reject Reason / Description'}
+            </div>
+            <textarea
+              className="tk-textarea"
+              rows={3}
+              placeholder={`Enter description for ${STATUS_LABEL[status]} status...`}
+              value={statusNotes[status] || ''}
+              onChange={e => handleStatusNotesChange(status, e.target.value)}
+            />
+
+            {/* Status Attachments */}
+            <div className="tk-detail-section-label" style={{ marginTop: 16, marginBottom: 6 }}>
+              {STATUS_LABEL[status]} Attachments ({(statusAttachments[status] || []).length} / 10)
+            </div>
+            <div className="tk-attachments-section" style={{ marginBottom: 12 }}>
+              {(statusAttachments[status] || []).length > 0 ? (
+                <div className="tk-attachments-list">
+                  {(statusAttachments[status] || []).map((att, idx) => {
+                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.file_url);
+                    return (
+                      <div key={idx} className="tk-attachment-card">
+                        <div className="tk-attachment-card-content">
+                          {isImage ? (
+                            <div className="tk-attachment-preview-container">
+                              <img src={att.file_url} alt={att.filename} className="tk-attachment-preview" />
+                            </div>
+                          ) : (
+                            <div className="tk-attachment-doc-icon">📄</div>
+                          )}
+                          <a href={att.file_url} target="_blank" rel="noreferrer" className="tk-attachment-link" title={att.filename}>
+                            {att.filename}
+                          </a>
+                        </div>
+                        <button onClick={() => handleStatusFileDelete(idx)} className="tk-attachment-delete-btn" title="Delete status attachment">
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="tk-empty-state" style={{ marginBottom: 8 }}>No attachments uploaded yet.</div>
+              )}
+              
+              <input
+                type="file"
+                multiple
+                disabled={uploadingStatusAtt}
+                onChange={handleStatusFileUpload}
+                style={{ display: 'none' }}
+                id="status-task-file-input"
+              />
+              <label htmlFor="status-task-file-input" className="tk-upload-btn-label">
+                {uploadingStatusAtt ? 'Uploading file...' : '📎 Add Attachment'}
+              </label>
+            </div>
+
+            <button
+              onClick={() => saveStatusNotesAndAttachments()}
+              disabled={savingNotes}
+              className="tk-confirm-btn"
+              style={{ marginTop: 8, padding: '6px 12px', fontSize: '0.8rem', width: 'auto' }}
+            >
+              {savingNotes ? 'Saving...' : 'Save Notes'}
+            </button>
+          </div>
+        )}
+
         {/* Subtasks */}
         <SubtaskChecklist subtasks={subtasks} onToggle={toggleSubtask} />
 
@@ -363,28 +584,16 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
           <PrSubmitForm task={task} onSubmit={handlePrSubmit} />
         )}
 
-        {/* Save / advance button */}
-        {status !== 'pr' && status !== 'blocked' && (() => {
-          const nextStatus = {
-            'pending':     'in-progress',
-            'todo':        'in-progress',
-            'in-progress': 'testing',
-            'testing':     'pr',
-          }[status];
-          if (!nextStatus) return null;
-          return (
-            <button
-              className="tk-confirm-btn"
-              style={{ marginTop: 20 }}
-              onClick={() => {
-                changeStatus(nextStatus);
-                setTimeout(() => { if (onClose) onClose(); }, 300);
-              }}
-            >
-              Save
-            </button>
-          );
-        })()}      </div>
+        {/* Save button — always saves notes, never changes status */}
+        <button
+          className="tk-confirm-btn"
+          style={{ marginTop: 20 }}
+          onClick={() => saveStatusNotesAndAttachments()}
+          disabled={savingNotes}
+        >
+          {savingNotes ? 'Saving...' : 'Save'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -457,6 +666,9 @@ export default function Tasks() {
 
     // If the change is a status update
     if (changes.status) {
+      // Optimistically update the task status in local cache immediately
+      const optimisticTasks = (tasksData?.items || []).map(t => t.id === id ? { ...t, status: changes.status } : t);
+      mutate({ ...tasksData, items: optimisticTasks }, false);
       try {
         const token = localStorage.getItem('nsg_jwt_token');
         await fetch(`/api/employee-portal/tasks/${id}/status`, {
@@ -465,12 +677,19 @@ export default function Tasks() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}` 
           },
-          body: JSON.stringify({ status: changes.status })
+          body: JSON.stringify({ 
+            status: changes.status,
+            ...(changes.customData !== undefined && { custom_data: changes.customData })
+          })
         });
-        // Revalidate from backend after status change
+        // Revalidate from backend to confirm saved status
         mutate();
         return;
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        mutate(); // Revert optimistic update on error
+      }
+      return;
     }
     
     // Optimistic UI update for other changes (subtasks, customData)

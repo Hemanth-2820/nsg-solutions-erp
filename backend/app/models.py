@@ -169,6 +169,7 @@ class Task(Base):
     # Relationships
     user = relationship("User", back_populates="tasks")
     subtasks = relationship("TaskSubtask", back_populates="task", cascade="all, delete-orphan")
+    attachments = relationship("TaskAttachment", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskSubtask(Base):
@@ -181,6 +182,19 @@ class TaskSubtask(Base):
 
     # Relationships
     task = relationship("Task", back_populates="subtasks")
+
+
+class TaskAttachment(Base):
+    __tablename__ = "task_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String, nullable=False)
+    file_url = Column(String, nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    task = relationship("Task", back_populates="attachments")
 
 
 class LeaveBalance(Base):

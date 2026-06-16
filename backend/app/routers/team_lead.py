@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 import json
+import os
+import uuid
+import shutil
 from typing import List, Optional
 from datetime import date, datetime
 
@@ -40,6 +43,18 @@ class UserProfileResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TaskAttachmentRequest(BaseModel):
+    filename: str
+    file_url: str
+
+class TaskAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    file_url: str
+
+    class Config:
+        from_attributes = True
+
 class TaskCreateRequest(BaseModel):
     project: str
     sprint: str
@@ -52,6 +67,7 @@ class TaskCreateRequest(BaseModel):
     custom_data: Optional[str] = None
     subtasks: List[str] = []
     acceptance: Optional[List[str]] = []
+    attachments: Optional[List[TaskAttachmentRequest]] = []
 
 class SubtaskResponse(BaseModel):
     id: int
@@ -78,6 +94,7 @@ class TaskResponse(BaseModel):
     custom_data: Optional[str] = None
     subtasks: List[SubtaskResponse]
     acceptance: Optional[List[str]] = []
+    attachments: List[TaskAttachmentResponse] = []
 
     @field_validator('acceptance', mode='before')
     @classmethod
@@ -203,6 +220,7 @@ class TaskBatchUpdateRequest(BaseModel):
 
 class TaskStatusUpdateRequest(BaseModel):
     status: str
+    custom_data: Optional[str] = None
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -280,6 +298,16 @@ def create_team_task(req: TaskCreateRequest, current_user: models.User = Depends
                 done=False
             )
             db.add(db_sub)
+            
+    if req.attachments:
+        for att in req.attachments:
+            db_att = models.TaskAttachment(
+                task_id=db_task.id,
+                filename=att.filename,
+                file_url=att.file_url
+            )
+            db.add(db_att)
+            
     db.commit()
     db.refresh(db_task)
     return db_task
@@ -301,6 +329,8 @@ def update_task_status(task_id: int, req: TaskStatusUpdateRequest, current_user:
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
     task.status = req.status
+    if req.custom_data is not None:
+        task.custom_data = req.custom_data
     db.commit()
     if task.milestone_id:
         update_milestone_progress(db, task.milestone_id)
@@ -437,6 +467,17 @@ def update_task(id: int, req: TaskCreateRequest, current_user: models.User = Dep
                 done=False
             )
             db.add(db_sub)
+            
+    # Update Attachments
+    db.query(models.TaskAttachment).filter(models.TaskAttachment.task_id == id).delete()
+    if req.attachments:
+        for att in req.attachments:
+            db_att = models.TaskAttachment(
+                task_id=task.id,
+                filename=att.filename,
+                file_url=att.file_url
+            )
+            db.add(db_att)
             
     db.commit()
     if task.milestone_id:
@@ -1223,5 +1264,91 @@ def create_project_milestone(project_id: int, req: MilestoneCreateRequest, curre
     # Calculate status and progress dynamically
     updated_milestone = update_milestone_progress(db, milestone.id)
     return updated_milestone
+
+
+# ─── Task Attachment Endpoints ───────────────────────────────────────────────
+
+@router.post("/tasks/upload")
+async def upload_task_file(file: UploadFile = File(...), current_user: models.User = Depends(security.get_current_user)):
+    verify_manager_role(current_user)
+    try:
+        os.makedirs(os.path.join("uploads", "tasks"), exist_ok=True)
+        unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
+        filepath = os.path.join("uploads", "tasks", unique_filename)
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        file_url = f"/uploads/tasks/{unique_filename}"
+        return {"filename": file.filename, "file_url": file_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+
+@router.post("/tasks/{task_id}/attachments", response_model=TaskAttachmentResponse)
+def add_task_attachment(task_id: int, req: TaskAttachmentRequest, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    db_att = models.TaskAttachment(
+        task_id=task_id,
+        filename=req.filename,
+        file_url=req.file_url
+    )
+    db.add(db_att)
+    db.commit()
+    db.refresh(db_att)
+    return db_att
+
+
+@router.delete("/tasks/{task_id}/attachments/{attachment_id}")
+def delete_task_attachment(task_id: int, attachment_id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    att = db.query(models.TaskAttachment).filter(models.TaskAttachment.id == attachment_id, models.TaskAttachment.task_id == task_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+        
+    # Delete from database
+    db.delete(att)
+    db.commit()
+    
+    # Try to delete from disk
+    try:
+        if att.file_url.startswith("/uploads/"):
+            local_path = att.file_url.lstrip("/")
+            if os.path.exists(local_path):
+                os.remove(local_path)
+    except Exception as e:
+        print(f"Error removing physical file: {e}")
+        
+    return {"status": "success", "message": "Attachment deleted successfully"}
+
+
+@router.delete("/tasks/{task_id}")
+def delete_task(task_id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.query(models.Subtask).filter(models.Subtask.task_id == task_id).delete()
+    db.query(models.TaskAttachment).filter(models.TaskAttachment.task_id == task_id).delete()
+    db.delete(task)
+    db.commit()
+    return {"status": "success", "message": f"Task {task_id} deleted"}
+
+
+@router.delete("/tasks")
+def delete_all_tasks(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    task_ids = [t.id for t in db.query(models.Task).all()]
+    if not task_ids:
+        return {"status": "success", "message": "No tasks to delete", "deleted": 0}
+    db.query(models.Subtask).filter(models.Subtask.task_id.in_(task_ids)).delete(synchronize_session=False)
+    db.query(models.TaskAttachment).filter(models.TaskAttachment.task_id.in_(task_ids)).delete(synchronize_session=False)
+    count = db.query(models.Task).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "success", "message": f"Deleted {count} tasks", "deleted": count}
+
+
 
 

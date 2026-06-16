@@ -44,6 +44,8 @@ const Projects = () => {
     pr: []
   });
   const [kanbanLoading, setKanbanLoading] = useState(false);
+  const [expandedColumns, setExpandedColumns] = useState({});  // tracks which columns show all cards
+  const [fullPageColumn, setFullPageColumn] = useState(null); // { id, title, cards } for full-page view
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [savedSprints, setSavedSprints] = useState(() => {
     const local = localStorage.getItem('nsg_saved_sprints');
@@ -197,7 +199,10 @@ const Projects = () => {
             date: t.due || '',
             progress: t.status === 'pr' ? 90 : t.status === 'testing' ? 70 : t.status === 'in-progress' ? 50 : 0,
             dbId: t.id,
-            sprint: t.sprint
+            sprint: t.sprint,
+            description: t.description || '',
+            attachments: t.attachments || [],
+            custom_data: t.custom_data || null
           };
           if (t.status === 'pending') columns.todo.push(card);
           else if (t.status === 'in-progress') columns.inProgress.push(card);
@@ -684,93 +689,205 @@ const Projects = () => {
     });
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-        {/* Sprint Filter Bar */}
-        <div style={{
-          display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px',
-          background: '#fff', padding: '12px 20px', borderRadius: '12px',
-          border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-        }}>
-          <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Sprint Filter:</label>
-          <select
-            value={selectedSprintFilter}
-            onChange={(e) => setSelectedSprintFilter(e.target.value)}
-            style={{
-              padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1',
-              fontSize: '13px', color: '#0f172a', background: '#f8fafc',
-              cursor: 'pointer', outline: 'none'
-            }}
-          >
-            <option value="All">All Sprints</option>
-            <option value="Backlog">Backlog / Unassigned</option>
-            {savedSprints.map(s => (
-              <option key={s.id} value={s.sprintId || s.name}>
-                {s.name} ({s.sprintId || `SPR-${s.id}`})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.kanbanContainer}>
-          {columns.map(col => (
-            <div
-              key={col.id}
-              className={styles.kanbanColumn}
-              onDragOver={allowDrop}
-              onDrop={(e) => handleDrop(e, col.id)}
+      <>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+          {/* Sprint Filter Bar */}
+          <div style={{
+            display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px',
+            background: '#fff', padding: '12px 20px', borderRadius: '12px',
+            border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Sprint Filter:</label>
+            <select
+              value={selectedSprintFilter}
+              onChange={(e) => setSelectedSprintFilter(e.target.value)}
+              style={{
+                padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                fontSize: '13px', color: '#0f172a', background: '#f8fafc',
+                cursor: 'pointer', outline: 'none'
+              }}
             >
-              <div className={styles.kanbanColHeader}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div className={styles.kColIcon}><col.Icon size={14} /></div>
-                  <h4>{col.title}</h4>
+              <option value="All">All Sprints</option>
+              <option value="Backlog">Backlog / Unassigned</option>
+              {savedSprints.map(s => (
+                <option key={s.id} value={s.sprintId || s.name}>
+                  {s.name} ({s.sprintId || `SPR-${s.id}`})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.kanbanContainer}>
+            {columns.map(col => (
+              <div
+                key={col.id}
+                className={styles.kanbanColumn}
+                onDragOver={allowDrop}
+                onDrop={(e) => handleDrop(e, col.id)}
+              >
+                <div className={styles.kanbanColHeader}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className={styles.kColIcon}><col.Icon size={14} /></div>
+                    <h4>{col.title}</h4>
+                  </div>
+                  <span className={styles.kanbanCount}>{filteredKanbanData[col.id].length}</span>
                 </div>
-                <span className={styles.kanbanCount}>{filteredKanbanData[col.id].length}</span>
+                <div className={styles.kanbanTasks}>
+                  {(() => {
+                    const allCards = filteredKanbanData[col.id];
+                    const isExpanded = expandedColumns[col.id];
+                    const LIMIT = 2;
+                    const visibleCards = isExpanded ? allCards : allCards.slice(0, LIMIT);
+                    const hasMore = allCards.length > LIMIT;
+                    return (
+                      <>
+                        {visibleCards.map(task => {
+                          const prioStyle = getPriorityStyle(task.priority);
+                          return (
+                            <div
+                              key={task.id}
+                              className={styles.kTaskCard}
+                              style={{ borderLeft: `4px solid ${prioStyle.border}` }}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, task.id, col.id)}
+                              onClick={() => setSelectedTaskDetails({ ...task, colId: col.id })}
+                            >
+                              <div className={styles.kTaskTitleRow}>
+                                <AlertCircle size={14} style={{ color: '#ef4444', minWidth: '14px' }} />
+                                <h5 className={styles.kTaskTitle}>{task.title}</h5>
+                                <ChevronRight size={14} style={{ color: '#94a3b8', minWidth: '14px' }} />
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 8px' }}>
+                                Sprint: {task.sprint || 'Backlog'}
+                              </div>
+                              <div className={styles.kTaskMetaRow}>
+                                <div className={styles.kMetaLeft}>
+                                  <span className={styles.kPriorityBadge} style={{ color: prioStyle.color, backgroundColor: prioStyle.bg }}>
+                                    {task.priority.toUpperCase()}
+                                  </span>
+                                  <span className={styles.kPoints}>{task.points} pts</span>
+                                  <div className={styles.kDateBox}>
+                                    <AlertTriangle size={12} style={{ color: '#94a3b8' }} />
+                                    <span>{task.date}</span>
+                                  </div>
+                                </div>
+                                <span className={styles.kProgressBadge}>
+                                  {task.progress}% done
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {hasMore && (
+                          <button
+                            onClick={() => setFullPageColumn({ id: col.id, title: col.title, cards: allCards })}
+                            style={{
+                              width: '100%', padding: '8px', marginTop: '6px',
+                              background: '#eff6ff', color: '#3b82f6',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                              cursor: 'pointer', transition: 'all 0.2s'
+                            }}
+                          >
+                            {`▼ View All (${allCards.length})`}
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
-              <div className={styles.kanbanTasks}>
-                {filteredKanbanData[col.id].map(task => {
-                  const prioStyle = getPriorityStyle(task.priority);
-                  return (
-                    <div
-                      key={task.id}
-                      className={styles.kTaskCard}
-                      style={{ borderLeft: `4px solid ${prioStyle.border}` }}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task.id, col.id)}
-                      onClick={() => setSelectedTaskDetails({ ...task, colId: col.id })}
-                    >
-                      <div className={styles.kTaskTitleRow}>
-                        <AlertCircle size={14} style={{ color: '#ef4444', minWidth: '14px' }} />
-                        <h5 className={styles.kTaskTitle}>{task.title}</h5>
-                        <ChevronRight size={14} style={{ color: '#94a3b8', minWidth: '14px' }} />
-                      </div>
-
-                      <div style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 8px' }}>
-                        Sprint: {task.sprint || 'Backlog'}
-                      </div>
-
-                      <div className={styles.kTaskMetaRow}>
-                        <div className={styles.kMetaLeft}>
-                          <span className={styles.kPriorityBadge} style={{ color: prioStyle.color, backgroundColor: prioStyle.bg }}>
-                            {task.priority.toUpperCase()}
-                          </span>
-                          <span className={styles.kPoints}>{task.points} pts</span>
-                          <div className={styles.kDateBox}>
-                            <AlertTriangle size={12} style={{ color: '#94a3b8' }} />
-                            <span>{task.date}</span>
-                          </div>
-                        </div>
-                        <span className={styles.kProgressBadge}>
-                          {task.progress}% done
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+
+        {/* Full-page column overlay */}
+        {fullPageColumn && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: '#f8fafc', display: 'flex', flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '16px',
+              padding: '18px 28px',
+              background: '#0f172a', color: '#fff',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.18)'
+            }}>
+              <button
+                onClick={() => setFullPageColumn(null)}
+                style={{
+                  background: '#1e293b', border: '1px solid #334155', color: '#94a3b8',
+                  borderRadius: '8px', padding: '7px 16px', fontSize: '13px',
+                  fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                ← Back
+              </button>
+              <div style={{ width: '1px', height: '28px', background: '#334155' }} />
+              <span style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '0.04em' }}>
+                {fullPageColumn.title}
+              </span>
+              <span style={{
+                background: '#3b82f6', color: '#fff',
+                borderRadius: '20px', padding: '2px 12px', fontSize: '13px', fontWeight: 700
+              }}>
+                {fullPageColumn.cards.length} Tasks
+              </span>
+            </div>
+
+            {/* Task grid */}
+            <div style={{
+              flex: 1, overflowY: 'auto', padding: '28px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '16px', alignContent: 'start'
+            }}>
+              {fullPageColumn.cards.map(task => {
+                const prioStyle = getPriorityStyle(task.priority);
+                return (
+                  <div
+                    key={task.id}
+                    style={{
+                      background: '#fff', borderRadius: '12px',
+                      border: '1px solid #e2e8f0',
+                      borderLeft: `4px solid ${prioStyle.border}`,
+                      padding: '16px 18px',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => { setSelectedTaskDetails({ ...task, colId: fullPageColumn.id }); setFullPageColumn(null); }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ color: '#ef4444', fontSize: '14px', marginTop: '1px' }}>⊙</span>
+                      <span style={{ fontWeight: 600, fontSize: '14px', color: '#0f172a', flex: 1 }}>{task.title}</span>
+                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>›</span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '10px' }}>
+                      Sprint: {task.sprint || 'Backlog'}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+                          color: prioStyle.color, background: prioStyle.bg
+                        }}>{task.priority.toUpperCase()}</span>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>{task.points} pts</span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>📅 {task.date}</span>
+                      </div>
+                      <span style={{
+                        fontSize: '11px', fontWeight: 600, padding: '3px 10px',
+                        borderRadius: '20px', background: '#ede9fe', color: '#7c3aed'
+                      }}>{task.progress}% done</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </>
     );
   };
 
@@ -1204,27 +1321,72 @@ const Projects = () => {
                   <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
                 </div>
 
-                <div className={styles.mBoxedRow}>
-                  <div className={styles.mBoxLeft}>
-                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#f3e8ff', color: '#a855f7' }}>
-                      <Paperclip size={16} />
-                    </div>
-                    <span className={styles.mBoxTitle}>ATTACHMENTS</span>
-                    <span className={styles.mAttachmentBadge}>0 Files Attached</span>
-                  </div>
-                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
-                </div>
+                {/* Resolve per-status notes and attachments from custom_data */}
+                {(() => {
+                  // Map kanban column -> status key used in custom_data
+                  const colStatusMap = {
+                    todo: 'pending',
+                    inProgress: 'in-progress',
+                    testing: 'testing',
+                    pr: 'pr',
+                    rejected: 'blocked'
+                  };
+                  const stKey = colStatusMap[selectedTaskDetails.colId] || 'pending';
+                  let customData = {};
+                  try {
+                    customData = selectedTaskDetails.custom_data ? JSON.parse(selectedTaskDetails.custom_data) : {};
+                  } catch(e) {}
+                  const phaseNote = (customData.status_notes || {})[stKey] || '';
+                  const phaseAttachments = (customData.status_attachments || {})[stKey] || [];
+                  const phaseLabels = { pending: 'Todo', 'in-progress': 'In-Progress', testing: 'Testing', pr: 'PR', blocked: 'Reject' };
+                  const phaseLabel = phaseLabels[stKey] || stKey;
 
-                <div className={styles.mBoxedRow}>
-                  <div className={styles.mBoxLeft}>
-                    <div className={styles.mIconWrapper} style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
-                      <MessageSquare size={16} />
-                    </div>
-                    <span className={styles.mBoxTitle}>DESCRIPTION</span>
-                    <span className={styles.mDescBadge}>Pending</span>
-                  </div>
-                  <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
-                </div>
+                  return (
+                    <>
+                      <div className={styles.mBoxedRow}>
+                        <div className={styles.mBoxLeft}>
+                          <div className={styles.mIconWrapper} style={{ backgroundColor: '#f3e8ff', color: '#a855f7' }}>
+                            <Paperclip size={16} />
+                          </div>
+                          <span className={styles.mBoxTitle}>ATTACHMENTS</span>
+                          <span className={styles.mAttachmentBadge}>{phaseAttachments.length} Files Attached ({phaseLabel})</span>
+                        </div>
+                        <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                      </div>
+                      {phaseAttachments.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px 12px 12px', background: '#faf5ff', borderRadius: '6px', marginBottom: '4px' }}>
+                          {phaseAttachments.map((file, idx) => (
+                            <a
+                              key={idx}
+                              href={file.file_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: '#fff', border: '1px solid #e2d9f3', borderRadius: '4px', fontSize: '12px', color: '#7c3aed', textDecoration: 'none', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
+                              📎 {file.filename}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className={styles.mBoxedRow}>
+                        <div className={styles.mBoxLeft}>
+                          <div className={styles.mIconWrapper} style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+                            <MessageSquare size={16} />
+                          </div>
+                          <span className={styles.mBoxTitle}>DESCRIPTION</span>
+                          <span className={styles.mDescBadge}>{phaseNote ? phaseLabel : 'Pending'}</span>
+                        </div>
+                        <ChevronDown size={16} style={{ color: '#cbd5e1' }} />
+                      </div>
+                      {phaseNote && (
+                        <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '6px', fontSize: '13px', color: '#334155', lineHeight: '1.6', marginBottom: '4px', borderLeft: '3px solid #94a3b8' }}>
+                          {phaseNote}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* RIGHT COLUMN */}
