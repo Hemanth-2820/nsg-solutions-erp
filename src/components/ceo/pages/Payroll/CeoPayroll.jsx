@@ -12,6 +12,7 @@ export default function CeoPayroll() {
   const [loading, setLoading] = useState(false);
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
   
   // Payment Modal State
   const [showModal, setShowModal] = useState(false);
@@ -30,6 +31,7 @@ export default function CeoPayroll() {
   const [notification, setNotification] = useState(null);
 
   useEffect(() => {
+    setSelectedDate(null);
     if (activeTab === 'pending') fetchPending();
     else fetchHistory();
   }, [activeTab, month, year]);
@@ -203,6 +205,62 @@ export default function CeoPayroll() {
     }
   };
 
+  const renderCalendar = () => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDay = new Date(year, month - 1, 1).getDay(); // 0 (Sun) to 6 (Sat)
+    
+    const recordsByDate = {};
+    historyRecords.forEach(r => {
+      if (r.payment_date) {
+        const d = r.payment_date.split('T')[0];
+        if (!recordsByDate[d]) recordsByDate[d] = 0;
+        recordsByDate[d]++;
+      }
+    });
+
+    const days = [];
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    weekDays.forEach(wd => days.push(<div key={`header-${wd}`} className="calendar-day-header">{wd}</div>));
+    
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
+    }
+    
+    for (let i = 1; i <= daysInMonth; i++) {
+      const mStr = month.toString().padStart(2, '0');
+      const dStr = i.toString().padStart(2, '0');
+      const dateStr = `${year}-${mStr}-${dStr}`;
+      
+      const count = recordsByDate[dateStr] || 0;
+      const isSelected = selectedDate === dateStr;
+      
+      days.push(
+        <div 
+          key={`day-${i}`} 
+          className={`calendar-day ${count > 0 ? 'has-payment' : ''} ${isSelected ? 'selected' : ''}`}
+          onClick={() => {
+            if (selectedDate === dateStr) setSelectedDate(null);
+            else setSelectedDate(dateStr);
+          }}
+        >
+          <span className="day-number">{i}</span>
+          {count > 0 && <span className="payment-badge">{count} Paid</span>}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="ceo-payroll-calendar">
+        {days}
+      </div>
+    );
+  };
+
+  const displayedHistory = selectedDate 
+    ? historyRecords.filter(r => r.payment_date && r.payment_date.startsWith(selectedDate))
+    : historyRecords;
+
   return (
     <div className="ceo-payroll-container">
       <div className="ceo-payroll-header">
@@ -211,28 +269,20 @@ export default function CeoPayroll() {
           <p>Process salaries, add bonuses or LOP, and generate payslips manually.</p>
         </div>
         <div className="ceo-payroll-filters">
-          <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))}>
-            {Array.from({ length: 12 }, (_, i) => i).filter(i => {
-              const now = new Date();
-              return year < now.getFullYear() || (year === now.getFullYear() && i <= now.getMonth());
-            }).map(i => (
-              <option key={i + 1} value={i + 1}>
-                {new Date(0, i).toLocaleString('default', { month: 'long' })}
-              </option>
-            ))}
-          </select>
-          <select value={year} onChange={(e) => {
-            const newYear = parseInt(e.target.value);
-            setYear(newYear);
-            const now = new Date();
-            if (newYear === now.getFullYear() && month > now.getMonth() + 1) {
-              setMonth(now.getMonth() + 1);
-            }
-          }}>
-            {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 10 + i).map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <input 
+            type="month"
+            value={`${year}-${month.toString().padStart(2, '0')}`}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val) {
+                const [y, m] = val.split('-');
+                setYear(parseInt(y));
+                setMonth(parseInt(m));
+              }
+            }}
+            className="ceo-form-input"
+            style={{ width: 'auto', cursor: 'pointer', padding: '8px 16px', fontWeight: '500', color: '#334155' }}
+          />
         </div>
       </div>
 
@@ -363,11 +413,22 @@ export default function CeoPayroll() {
       )}
 
       {!loading && activeTab === 'history' && (
-        <div className="ceo-payroll-card">
-          <div className="table-responsive">
-            <table className="ceo-payroll-table">
-              <thead>
-                <tr>
+        <>
+          <div className="ceo-payroll-card" style={{ marginBottom: '24px', padding: '16px' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: '#1e293b' }}>Payment Calendar</h3>
+            {renderCalendar()}
+            {selectedDate && (
+              <div style={{ marginTop: '12px', fontSize: '14px', color: '#2563eb', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Showing payments for: <strong>{selectedDate}</strong></span>
+                <button onClick={() => setSelectedDate(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>Clear Filter</button>
+              </div>
+            )}
+          </div>
+          <div className="ceo-payroll-card">
+            <div className="table-responsive">
+              <table className="ceo-payroll-table">
+                <thead>
+                  <tr>
                   <th>Employee</th>
                   <th>Month/Year</th>
                   <th>Payment Method</th>
@@ -376,29 +437,30 @@ export default function CeoPayroll() {
                   <th>Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {historyRecords.length === 0 ? (
-                  <tr><td colSpan="6" className="empty-state">No payroll history found for this period.</td></tr>
-                ) : (
-                  historyRecords.map(r => (
-                    <tr key={r.id}>
-                      <td>{r.employee_name}</td>
-                      <td>{r.month} / {r.year}</td>
-                      <td><span className="badge method">{r.payment_method}</span></td>
-                      <td className="mono">{r.transaction_ref}</td>
-                      <td className="amount-col net-pay">₹{Math.round(r.net).toLocaleString()}</td>
-                      <td>
-                        <button className="btn-download" onClick={() => downloadPDF(r)}>
-                          <FileText size={14} /> Download PDF
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                <tbody>
+                  {displayedHistory.length === 0 ? (
+                    <tr><td colSpan="6" className="empty-state">No payroll history found for this period.</td></tr>
+                  ) : (
+                    displayedHistory.map(r => (
+                      <tr key={r.id}>
+                        <td>{r.employee_name}</td>
+                        <td>{r.month} / {r.year}</td>
+                        <td><span className="badge method">{r.payment_method}</span></td>
+                        <td className="mono">{r.transaction_ref}</td>
+                        <td className="amount-col net-pay">₹{Math.round(r.net).toLocaleString()}</td>
+                        <td>
+                          <button className="btn-download" onClick={() => downloadPDF(r)}>
+                            <FileText size={14} /> Download PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Payment Modal */}
