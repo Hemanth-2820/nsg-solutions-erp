@@ -273,9 +273,12 @@ export default function CeoPayroll() {
               <thead>
                 <tr>
                   <th>Employee</th>
-                  <th>Basic + HRA</th>
+                  <th>Basic (Edit)</th>
+                  <th>HRA (Edit)</th>
                   <th>Bonus (Edit)</th>
                   <th>LOP (Edit)</th>
+                  <th>EPF (Edit)</th>
+                  <th>TDS (Edit)</th>
                   <th>Deductions</th>
                   <th>Net Payable</th>
                   <th>Action</th>
@@ -283,7 +286,7 @@ export default function CeoPayroll() {
               </thead>
               <tbody>
                 {pendingRecords.length === 0 ? (
-                  <tr><td colSpan="7" className="empty-state">No pending payrolls for this month.</td></tr>
+                  <tr><td colSpan="10" className="empty-state">No pending payrolls for this month.</td></tr>
                 ) : (
                   pendingRecords.map(r => (
                     <tr key={r.employee_id}>
@@ -291,7 +294,22 @@ export default function CeoPayroll() {
                         <div className="emp-name">{r.employee_name}</div>
                         <div className="emp-role">{r.role.toUpperCase()}</div>
                       </td>
-                      <td className="amount-col">₹{Math.round(r.basic + r.hra).toLocaleString()}</td>
+                      <td>
+                        <input 
+                          type="number" 
+                          className="edit-input basic" 
+                          value={r.basic === 0 ? '' : r.basic}
+                          onChange={(e) => handleEdit(r.employee_id, 'basic', e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input 
+                          type="number" 
+                          className="edit-input hra" 
+                          value={r.hra === 0 ? '' : r.hra}
+                          onChange={(e) => handleEdit(r.employee_id, 'hra', e.target.value)}
+                        />
+                      </td>
                       <td>
                         <input 
                           type="number" 
@@ -301,12 +319,37 @@ export default function CeoPayroll() {
                         />
                       </td>
                       <td>
-                        <input 
-                          type="number" 
-                          className="edit-input lop" 
-                          value={r.lop === 0 ? '' : r.lop}
-                          onChange={(e) => handleEdit(r.employee_id, 'lop', e.target.value)}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span className="text-red font-semibold">-₹</span>
+                          <input 
+                            type="number" 
+                            className="edit-input lop" 
+                            value={r.lop === 0 ? '' : r.lop}
+                            onChange={(e) => handleEdit(r.employee_id, 'lop', e.target.value)}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span className="text-red font-semibold">-₹</span>
+                          <input 
+                            type="number" 
+                            className="edit-input epf" 
+                            value={r.epf === 0 ? '' : r.epf}
+                            onChange={(e) => handleEdit(r.employee_id, 'epf', e.target.value)}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span className="text-red font-semibold">-₹</span>
+                          <input 
+                            type="number" 
+                            className="edit-input tds" 
+                            value={r.tds === 0 ? '' : r.tds}
+                            onChange={(e) => handleEdit(r.employee_id, 'tds', e.target.value)}
+                          />
+                        </div>
                       </td>
                       <td className="amount-col text-red">-₹{Math.round(r.epf + r.tds).toLocaleString()}</td>
                       <td className="amount-col net-pay">₹{Math.round(r.net).toLocaleString()}</td>
