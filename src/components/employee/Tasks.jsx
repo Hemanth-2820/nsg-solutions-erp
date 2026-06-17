@@ -250,25 +250,93 @@ function DynamicCustomForm({ task, schema, onUpdate, onClose }) {
   return (
     <div className="tk-pr-section">
       <div className="tk-detail-section-label" style={{marginBottom: 12}}>Custom Fields (Schema Driven)</div>
-      {schema.map(field => (
-        <div key={field.name} className="tk-field-group" style={{marginBottom: 12}}>
-          <label className="tk-label" style={{fontWeight: 600}}>{field.label}</label>
-          {field.type === 'textarea' ? (
-            <textarea
-              className="tk-textarea"
-              value={customData[field.name] || ''}
-              onChange={e => handleChange(field.name, e.target.value)}
-            />
-          ) : (
-            <input
-              type={field.type}
-              className="tk-input"
-              value={customData[field.name] || ''}
-              onChange={e => handleChange(field.name, e.target.value)}
-            />
-          )}
-        </div>
-      ))}
+      {schema.map(field => {
+        const isFile = field.type === 'file';
+        const fileUrls = Array.isArray(customData[field.name]) ? customData[field.name] : [];
+
+        return (
+          <div key={field.name} className="tk-field-group" style={{marginBottom: 12}}>
+            <label className="tk-label" style={{fontWeight: 600}}>{field.label}</label>
+            {isFile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {fileUrls.map((file, idx) => (
+                    <div key={idx} className="tk-attachment-card" style={{ padding: '6px', minWidth: 'auto' }}>
+                      <div className="tk-attachment-card-content">
+                        <a href={file.file_url} target="_blank" rel="noreferrer" className="tk-attachment-link" style={{ fontSize: '0.85rem' }}>
+                          {file.filename}
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomData(prev => ({
+                            ...prev,
+                            [field.name]: fileUrls.filter((_, i) => i !== idx)
+                          }));
+                        }}
+                        className="tk-attachment-delete-btn"
+                        style={{ position: 'relative', top: 0, right: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  id={`emp-custom-upload-${field.name}`}
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files);
+                    if (files.length === 0) return;
+                    const token = localStorage.getItem('nsg_jwt_token');
+                    const uploaded = [...fileUrls];
+                    for (const f of files) {
+                      const formData = new FormData();
+                      formData.append('file', f);
+                      try {
+                        const res = await fetch('/api/employee-portal/tasks/upload', {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` },
+                          body: formData
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          uploaded.push({ filename: data.filename, file_url: data.file_url });
+                        } else {
+                          alert(`Failed to upload ${f.name}`);
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        alert(`Error uploading ${f.name}`);
+                      }
+                    }
+                    setCustomData(prev => ({ ...prev, [field.name]: uploaded }));
+                  }}
+                />
+                <label htmlFor={`emp-custom-upload-${field.name}`} className="tk-upload-btn-label" style={{ display: 'inline-block', width: 'max-content' }}>
+                  📎 Choose Files
+                </label>
+              </div>
+            ) : field.type === 'textarea' ? (
+              <textarea
+                className="tk-textarea"
+                value={customData[field.name] || ''}
+                onChange={e => handleChange(field.name, e.target.value)}
+              />
+            ) : (
+              <input
+                type={field.type}
+                className="tk-input"
+                value={customData[field.name] || ''}
+                onChange={e => handleChange(field.name, e.target.value)}
+              />
+            )}
+          </div>
+        );
+      })}
       <button className={`tk-confirm-btn ${loading ? 'tk-confirm-btn--loading' : ''}`} onClick={handleSubmit} disabled={loading} style={{marginTop: 8}}>
         {loading ? <><span className="tk-spin"/>Saving…</> : 'Save'}
       </button>
@@ -452,6 +520,9 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
         {/* Description */}
         <div className="tk-detail-section-label">Description</div>
         <p className="tk-detail-desc">{task.description}</p>
+
+        {/* Dynamic Schema Fields */}
+        <DynamicCustomForm task={task} schema={task.schema} onUpdate={onUpdate} />
 
         {/* Attachments */}
         <div className="tk-detail-section-label" style={{ marginTop: 16 }}>Requirement Attachments ({attachmentsList.length})</div>
@@ -640,11 +711,25 @@ export default function Tasks() {
       }
     }
     
-    // If the change is customData submission
-    if (changes.customData) {
-      // Typically we'd have a specific endpoint or PATCH to /tasks/:id to update generic tasks.
-      // For demonstration, we simply optimistically update the state.
-      console.log('Saved custom data:', changes.customData);
+    // If the change is customData submission without a status change
+    if (changes.customData && !changes.status) {
+      try {
+        const token = localStorage.getItem('nsg_jwt_token');
+        const currentTask = tasks.find(t => t.id === id);
+        await fetch(`/api/employee-portal/tasks/${id}/status`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          },
+          body: JSON.stringify({ 
+            status: currentTask.status,
+            custom_data: changes.customData
+          })
+        });
+        mutate();
+        if (window.toast) window.toast.success("Custom fields saved!");
+      } catch (e) { console.error(e); }
     }
     
     // If the change is a PR submission

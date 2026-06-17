@@ -458,6 +458,7 @@ export function HrSettingsView() {
                 <option value="textarea">Textarea (Long)</option>
                 <option value="url">URL / Link</option>
                 <option value="date">Date</option>
+                <option value="file">File / Image Upload</option>
               </select>
             </div>
             <button onClick={handleAddField} style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', height: '37px', display: 'flex', alignItems: 'center', gap: '6px' }}>

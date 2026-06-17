@@ -230,12 +230,12 @@ def submit_pr(id: int, req: PRSubmitRequest, current_user: models.User = Depends
 def get_task_schema(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
     user_dept = current_user.department if current_user.department else "IT"
     
-    schema_record = db.query(models.DepartmentSchema).filter(models.DepartmentSchema.department == user_dept).first()
+    schema_record = db.query(models.CustomSchema).filter(models.CustomSchema.department == user_dept).first()
     
     if schema_record:
         import json
         try:
-            schema_data = json.loads(schema_record.schema_json)
+            schema_data = json.loads(schema_record.schema_fields)
         except Exception:
             schema_data = []
     else:
