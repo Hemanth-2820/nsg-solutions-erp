@@ -72,15 +72,16 @@ export function HrSettingsView() {
   // --- SCHEMA BUILDER ---
   const [schemas, setSchemas] = useState({});
   const [selectedDept, setSelectedDept] = useState("IT");
-  const [isAddingDept, setIsAddingDept] = useState(false);
-  const [newDeptName, setNewDeptName] = useState("");
   const [newField, setNewField] = useState({ name: '', label: '', type: 'text' });
   const [schemaLoading, setSchemaLoading] = useState(false);
+
+  const [departments, setDepartments] = useState([]);
 
   useEffect(() => {
     fetchSchemas();
     fetchLeavePolicies();
     fetchHolidays();
+    fetchDepartments();
   }, []);
 
   const fetchLeavePolicies = async () => {
@@ -100,6 +101,16 @@ export function HrSettingsView() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setHolidays(await res.json());
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      const res = await fetch('/api/hr-portal/departments', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setDepartments(await res.json());
     } catch (err) { console.error(err); }
   };
 
@@ -350,52 +361,15 @@ export function HrSettingsView() {
             <Sliders size={20} style={{ color: '#8b5cf6' }} /> Custom Task Forms (Schema Builder)
           </h3>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {isAddingDept ? (
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <input
-                  type="text"
-                  placeholder="New Dept Name"
-                  value={newDeptName}
-                  onChange={e => setNewDeptName(e.target.value)}
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '6px 12px', borderRadius: '4px' }}
-                />
-                <button
-                  onClick={() => {
-                    if (newDeptName.trim()) {
-                      setSelectedDept(newDeptName.trim());
-                      setIsAddingDept(false);
-                      setNewDeptName("");
-                    }
-                  }}
-                  style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  OK
-                </button>
-                <button
-                  onClick={() => setIsAddingDept(false)}
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
               <select 
                 value={selectedDept} 
-                onChange={(e) => {
-                  if (e.target.value === '__ADD_NEW__') {
-                    setIsAddingDept(true);
-                  } else {
-                    setSelectedDept(e.target.value);
-                  }
-                }}
+                onChange={(e) => setSelectedDept(e.target.value)}
                 style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '6px 12px', borderRadius: '4px' }}
               >
-                {[...new Set(['IT', 'Sales', 'Marketing', 'HR', 'Finance', ...Object.keys(schemas)])].map(d => (
-                  <option key={d} value={d}>{d}</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
                 ))}
-                <option value="__ADD_NEW__">+ Add Custom Department...</option>
               </select>
-            )}
           </div>
         </div>
 
@@ -458,6 +432,7 @@ export function HrSettingsView() {
                 <option value="textarea">Textarea (Long)</option>
                 <option value="url">URL / Link</option>
                 <option value="date">Date</option>
+                <option value="file">File / Image Upload</option>
               </select>
             </div>
             <button onClick={handleAddField} style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', height: '37px', display: 'flex', alignItems: 'center', gap: '6px' }}>

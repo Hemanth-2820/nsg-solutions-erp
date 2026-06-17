@@ -513,6 +513,24 @@ def reassign_task(id: int, req: ReassignRequest, current_user: models.User = Dep
     db.refresh(task)
     return task
 
+@router.get("/tasks/schema")
+def get_task_schema(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+    verify_manager_role(current_user)
+    user_dept = current_user.department if current_user.department else "IT"
+    
+    schema_record = db.query(models.DepartmentSchema).filter(models.DepartmentSchema.department == user_dept).first()
+    
+    if schema_record:
+        import json
+        try:
+            schema_data = json.loads(schema_record.schema_json)
+        except Exception:
+            schema_data = []
+    else:
+        schema_data = [{"name": "notes", "type": "text", "label": "Additional Notes"}]
+        
+    return {"department": user_dept, "schema": schema_data}
+
 # 3. Approvals (Leaves)
 @router.get("/leaves/pending", response_model=List[LeaveRequestResponse])
 def get_pending_leaves(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):

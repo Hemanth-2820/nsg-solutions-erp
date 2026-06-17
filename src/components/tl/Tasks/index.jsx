@@ -18,6 +18,8 @@ export default function Tasks({ currentUser }) {
   const { data: tasks = [], mutate: mutateTasks } = useSWR('/api/team-lead/tasks', fetcher);
   const { data: projectsData = [], mutate: mutateProjects } = useSWR('/api/team-lead/projects', fetcher);
   const { data: backendSprints } = useSWR('/api/team-lead/sprints', fetcher);
+  const { data: schemaData } = useSWR('/api/team-lead/tasks/schema', fetcher);
+  const schema = schemaData?.schema || [];
 
   const savedSprints = (() => {
     if (backendSprints && backendSprints.length > 0) {
@@ -48,6 +50,7 @@ export default function Tasks({ currentUser }) {
   const [uploading, setUploading] = useState(false);
   const [statusNotes, setStatusNotes] = useState({});
   const [statusAttachments, setStatusAttachments] = useState({});
+  const [customFields, setCustomFields] = useState({});
 
   // Do not auto-select first project — let user choose
 
@@ -132,9 +135,12 @@ export default function Tasks({ currentUser }) {
       const data = rawTask.custom_data ? JSON.parse(rawTask.custom_data) : {};
       setStatusNotes(data.status_notes || {});
       setStatusAttachments(data.status_attachments || {});
+      const { status_notes, status_attachments, ...rest } = data;
+      setCustomFields(rest);
     } catch(e) {
       setStatusNotes({});
       setStatusAttachments({});
+      setCustomFields({});
     }
     setEditingTaskId(rawTask.id);
     previousViewRef.current = activeView; // remember current tab before switching to edit form
@@ -222,6 +228,7 @@ export default function Tasks({ currentUser }) {
     }
     const updatedCustom = {
       ...currentCustom,
+      ...customFields,
       status_notes: statusNotes,
       status_attachments: statusAttachments
     };
@@ -267,6 +274,7 @@ export default function Tasks({ currentUser }) {
         setTaskAttachments([]);
         setStatusNotes({});
         setStatusAttachments({});
+        setCustomFields({});
         // Return to the tab the user was on before editing; for new tasks go to list
         setActiveView(editingTaskId ? previousViewRef.current : 'list');
         mutateTasks();
@@ -488,6 +496,98 @@ export default function Tasks({ currentUser }) {
                 <label className={styles.formLabel}>Acceptance Criteria</label>
                 <textarea className={styles.formTextarea} placeholder="- Given... When... Then..." value={taskAcceptance} onChange={(e) => setTaskAcceptance(e.target.value)}></textarea>
               </div>
+
+              {/* Dynamic Schema Fields */}
+              {schema && schema.length > 0 && schema.map(field => {
+                const isFile = field.type === 'file';
+                const fileUrls = Array.isArray(customFields[field.name]) ? customFields[field.name] : [];
+
+                return (
+                  <div key={field.name} className={`${styles.formGroup} ${field.type === 'textarea' || isFile ? styles.fullWidth : ''}`}>
+                    <label className={styles.formLabel}>{field.label}</label>
+                    {isFile ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {fileUrls.map((file, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '4px', backgroundColor: '#f1f5f9', border: '1px solid var(--border-card)' }}>
+                              <a
+                                href={file.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none', color: 'var(--primary)' }}
+                              >
+                                {file.filename}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomFields(prev => ({
+                                    ...prev,
+                                    [field.name]: fileUrls.filter((_, i) => i !== idx)
+                                  }));
+                                }}
+                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <input
+                          type="file"
+                          multiple
+                          id={`tl-custom-upload-${field.name}`}
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const files = Array.from(e.target.files);
+                            if (files.length === 0) return;
+                            const token = localStorage.getItem('nsg_jwt_token');
+                            const uploaded = [...fileUrls];
+                            for (const f of files) {
+                              const formData = new FormData();
+                              formData.append('file', f);
+                              try {
+                                const res = await fetch('/api/team-lead/tasks/upload', {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${token}` },
+                                  body: formData
+                                });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  uploaded.push({ filename: data.filename, file_url: data.file_url });
+                                } else {
+                                  alert(`Failed to upload ${f.name}`);
+                                }
+                              } catch (err) {
+                                console.error(err);
+                                alert(`Error uploading ${f.name}`);
+                              }
+                            }
+                            setCustomFields(prev => ({ ...prev, [field.name]: uploaded }));
+                          }}
+                        />
+                        <label htmlFor={`tl-custom-upload-${field.name}`} className={styles.addSubtaskBtn} style={{ cursor: 'pointer', margin: 0, alignSelf: 'flex-start' }}>
+                          Choose Files
+                        </label>
+                      </div>
+                    ) : field.type === 'textarea' ? (
+                      <textarea
+                        className={styles.formTextarea}
+                        value={customFields[field.name] || ''}
+                        onChange={(e) => setCustomFields(prev => ({ ...prev, [field.name]: e.target.value }))}
+                      ></textarea>
+                    ) : (
+                      <input
+                        type={field.type}
+                        className={styles.formInput}
+                        value={customFields[field.name] || ''}
+                        onChange={(e) => setCustomFields(prev => ({ ...prev, [field.name]: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                 <label className={styles.formLabel}>Requirement Attachments (Images, PDFs, Docs, Text - Up to 10 files)</label>
                 <input
@@ -671,6 +771,7 @@ export default function Tasks({ currentUser }) {
                       setTaskAttachments([]);
                       setStatusNotes({});
                       setStatusAttachments({});
+                      setCustomFields({});
                       setSubtasks(['']);
                     }}
                   >
