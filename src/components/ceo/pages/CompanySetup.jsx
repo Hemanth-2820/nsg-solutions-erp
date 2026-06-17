@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Building2, Network, Briefcase, Clock, CalendarDays, Plus, 
   Trash2, Edit2, Save, AlertCircle, ChevronDown, ChevronRight, Upload,
-  CheckCircle, Users, Settings, Filter, X
+  CheckCircle, Users, Settings, Filter, X, MapPin
 } from 'lucide-react';
 import '../CEO.css';
 
@@ -162,7 +162,9 @@ export default function CompanySetup() {
     cin: 'U74900MH2010PTC123456',
     address: 'Unit 401, Mindspace IT Park, Malad West, Mumbai, Maharashtra 400064',
     fy: 'apr',
-    currency: 'inr'
+    currency: 'inr',
+    office_latitude: '',
+    office_longitude: ''
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -194,7 +196,9 @@ export default function CompanySetup() {
           cin: configs.company_cin || 'U74900MH2010PTC123456',
           address: configs.company_address || 'Unit 401, Mindspace IT Park, Malad West, Mumbai, Maharashtra 400064',
           fy: configs.company_fy || 'apr',
-          currency: configs.company_currency || 'inr'
+          currency: configs.company_currency || 'inr',
+          office_latitude: configs.office_latitude || '',
+          office_longitude: configs.office_longitude || ''
         });
         if (configs.company_logo) {
           setLogoFile(configs.company_logo.split('/').pop());
@@ -265,6 +269,27 @@ export default function CompanySetup() {
 
   // ─── Event Handlers ──────────────────────────────────────────────────────────
 
+  const handleCaptureGPS = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported by your browser');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setProfileData({
+          ...profileData,
+          office_latitude: position.coords.latitude.toFixed(6),
+          office_longitude: position.coords.longitude.toFixed(6)
+        });
+        showToast('Office GPS location captured!');
+      },
+      (error) => {
+        showToast('Failed to get GPS location. Please allow location access.');
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -275,8 +300,10 @@ export default function CompanySetup() {
     const p4 = saveSetting('company_address', profileData.address);
     const p5 = saveSetting('company_fy', profileData.fy);
     const p6 = saveSetting('company_currency', profileData.currency);
+    const p7 = saveSetting('office_latitude', profileData.office_latitude);
+    const p8 = saveSetting('office_longitude', profileData.office_longitude);
     
-    const results = await Promise.all([p1, p2, p3, p4, p5, p6]);
+    const results = await Promise.all([p1, p2, p3, p4, p5, p6, p7, p8]);
     setIsSaving(false);
     if (results.every(r => r)) {
       showToast('Profile configuration saved securely.');
@@ -625,6 +652,26 @@ export default function CompanySetup() {
                   <div className="ceo-form-group" style={{ gridColumn: '1 / -1' }}>
                     <label>Registered Address</label>
                     <textarea className="ceo-form-input" required rows={3} value={profileData.address || ''} onChange={(e) => setProfileData({...profileData, address: e.target.value})} />
+                  </div>
+                  
+                  <div className="ceo-form-group" style={{ gridColumn: '1 / -1', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <label style={{ margin: 0, fontWeight: 600, color: 'var(--ceo-text-primary)' }}>Office GPS Coordinates</label>
+                        <button type="button" className="ceo-btn ceo-btn-primary" onClick={handleCaptureGPS} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                            <MapPin size={14} style={{ marginRight: '6px' }} /> Use My Current Location
+                        </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                            <label style={{ fontSize: '12px', color: 'var(--ceo-text-secondary)', marginBottom: '4px', display: 'block' }}>Latitude</label>
+                            <input className="ceo-form-input" placeholder="e.g. 17.6868" required value={profileData.office_latitude || ''} onChange={(e) => setProfileData({...profileData, office_latitude: e.target.value})} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '12px', color: 'var(--ceo-text-secondary)', marginBottom: '4px', display: 'block' }}>Longitude</label>
+                            <input className="ceo-form-input" placeholder="e.g. 83.2185" required value={profileData.office_longitude || ''} onChange={(e) => setProfileData({...profileData, office_longitude: e.target.value})} />
+                        </div>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--ceo-text-muted)', marginTop: '8px', marginBottom: 0 }}>These coordinates will be used to automatically mark employee attendance as "Office" or "WFH" (300 meters radius).</p>
                   </div>
                   
                   <div className="ceo-form-group">

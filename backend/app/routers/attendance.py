@@ -136,32 +136,40 @@ def clock_in(req: ClockInRequest, current_user: models.User = Depends(security.g
             detail="You have already clocked in today."
         )
     
-    # Validate location if geofencing is enabled and mode is office
-    if req.work_mode == "office":
-        enabled_s = db.query(models.SystemSetting).filter(models.SystemSetting.key == "geofence_enabled").first()
-        geofence_enabled = enabled_s.value.lower() == "true" if enabled_s else True
-        
-        if geofence_enabled:
-            if req.latitude is None or req.longitude is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Coordinates are required for Office clock-in validation."
-                )
-            
+    # Validate location and dynamically assign work_mode
+    enabled_s = db.query(models.SystemSetting).filter(models.SystemSetting.key == "geofence_enabled").first()
+    geofence_enabled = enabled_s.value.lower() == "true" if enabled_s else True
+    
+    if geofence_enabled:
+        if req.latitude is None or req.longitude is None:
+            # If GPS is not provided, enforce WFH
+            req.work_mode = "wfh"
+        else:
             lat_s = db.query(models.SystemSetting).filter(models.SystemSetting.key == "office_latitude").first()
             lng_s = db.query(models.SystemSetting).filter(models.SystemSetting.key == "office_longitude").first()
             rad_s = db.query(models.SystemSetting).filter(models.SystemSetting.key == "allowed_radius").first()
             
-            office_lat = float(lat_s.value) if lat_s else 12.9716
-            office_lng = float(lng_s.value) if lng_s else 77.5946
-            allowed_radius = float(rad_s.value) if rad_s else 100.0
+            # Use valid float defaults for coordinates.
+            try:
+                office_lat = float(lat_s.value) if lat_s and lat_s.value else 12.9716
+                office_lng = float(lng_s.value) if lng_s and lng_s.value else 77.5946
+            except ValueError:
+                office_lat, office_lng = 12.9716, 77.5946
+                
+            allowed_radius = float(rad_s.value) if rad_s and rad_s.value else 300.0
             
             distance = calculate_haversine_distance(req.latitude, req.longitude, office_lat, office_lng)
-            if distance > allowed_radius:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Outside office perimeter. Current distance: {distance:.0f}m, Allowed: {allowed_radius:.0f}m."
-                )
+            
+            # DEBUG LOGGING
+            with open("debug_gps.txt", "w") as f:
+                f.write(f"Emp Lat: {req.latitude}, Emp Lng: {req.longitude}\n")
+                f.write(f"Off Lat: {office_lat}, Off Lng: {office_lng}\n")
+                f.write(f"Distance: {distance} meters (Allowed: {allowed_radius})\n")
+            
+            if distance <= allowed_radius:
+                req.work_mode = "office"
+            else:
+                req.work_mode = "wfh"
 
     # Calculate lateness (threshold: clock-in after 09:30 AM local time)
     is_late = local_now.hour > 9 or (local_now.hour == 9 and local_now.minute > 30)
