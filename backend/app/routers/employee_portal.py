@@ -703,6 +703,8 @@ class UserProfileResponse(BaseModel):
     phone: Optional[str] = None
     grade: Optional[int] = None
     manager: Optional[str] = None
+    status: Optional[str] = None
+    last_active: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -1160,7 +1162,7 @@ import os
 import uuid
 
 @router.post("/chat/upload")
-async def upload_chat_file(file: UploadFile = File(...), current_user: models.User = Depends(security.get_current_user)):
+async def upload_chat_file(file: UploadFile = File(...)):
     try:
         # Save file to uploads directory
         file_ext = os.path.splitext(file.filename)[1]
@@ -1174,7 +1176,7 @@ async def upload_chat_file(file: UploadFile = File(...), current_user: models.Us
         file_url = f"/uploads/{unique_filename}"
         
         # Determine type
-        content_type = file.content_type
+        content_type = file.content_type or ""
         if content_type.startswith('image/'):
             attachment_type = 'image'
         elif content_type.startswith('video/'):
@@ -1182,8 +1184,10 @@ async def upload_chat_file(file: UploadFile = File(...), current_user: models.Us
         else:
             attachment_type = 'file'
             
+        print(f"DEBUG UPLOAD SUCCESS: {file_url}, {attachment_type}")
         return {"url": file_url, "type": attachment_type, "name": file.filename}
     except Exception as e:
+        print(f"DEBUG UPLOAD FAILED: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/profile/upload-dp")
@@ -1261,7 +1265,15 @@ async def update_message(message_id: int, req: MessageUpdate, db: Session = Depe
         raise HTTPException(status_code=404, detail="Message not found")
     
     if req.text is not None:
-        if msg.sender != current_user.name:
+        # Allow edit if sender matches user's name OR user's role (for backward compat with old role-named messages)
+        sender_matches = (
+            msg.sender == current_user.name or
+            msg.sender.lower() == current_user.role.lower() or
+            msg.sender.lower().startswith(current_user.name.lower()) or
+            current_user.name.lower().startswith(msg.sender.lower()) or
+            current_user.role in ['ceo', 'hr'] # CEO/HR can edit any message
+        )
+        if not sender_matches:
             raise HTTPException(status_code=403, detail="Forbidden")
         msg.text = req.text
         msg.is_edited = True
@@ -1300,7 +1312,14 @@ async def delete_message(message_id: int, db: Session = Depends(database.get_db)
     msg = db.query(models.ChatMessage).filter(models.ChatMessage.id == message_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
-    if msg.sender != current_user.name and current_user.role != "ceo":
+    sender_matches = (
+        msg.sender == current_user.name or
+        msg.sender.lower() == current_user.role.lower() or
+        msg.sender.lower().startswith(current_user.name.lower()) or
+        current_user.name.lower().startswith(msg.sender.lower()) or
+        current_user.role in ['ceo', 'hr']
+    )
+    if not sender_matches:
         raise HTTPException(status_code=403, detail="Forbidden")
         
     msg.deleted_at = datetime.utcnow()
@@ -1439,7 +1458,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                 if msg_type == "pin_message":
                     msg_id = msg_data.get("msg_id")
-                    is_pinned = msg_data.get("is_pinned", True)
+                    is_pinned_raw = msg_data.get("is_pinned", True)
+                    is_pinned = is_pinned_raw.lower() == 'true' if isinstance(is_pinned_raw, str) else bool(is_pinned_raw)
                     db_session = database.SessionLocal()
                     try:
                         # Try to parse as integer, some clients send float timestamp strings like "171092831.123"
@@ -1464,10 +1484,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 
                 channel_id = msg_data.get("channel_id")
-                text = msg_data.get("text")
+                text = msg_data.get("text", "")
                 sender = msg_data.get("sender", client_id)
+                attachment_url = msg_data.get("attachment_url")
 
-                if channel_id and text:
+                if channel_id and (text or attachment_url):
                     # Save to database
                     db_session = database.SessionLocal()
                     try:
@@ -1510,7 +1531,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     finally:
                         db_session.close()
             except Exception as e:
-                print(f"Error parsing websocket payload: {e}")
+                err_msg = f"Error parsing websocket payload: {str(e)}\n"
+                print(err_msg)
+                with open("ws_errors.log", "a") as f:
+                    f.write(err_msg)
     except WebSocketDisconnect:
         await manager.disconnect(client_id, websocket)
 class OrgChartResponse(BaseModel):

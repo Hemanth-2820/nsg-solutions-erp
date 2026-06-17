@@ -4,17 +4,27 @@ import {
   Hash, Send, Plus, Search, Sparkles, X, PhoneCall, ChevronDown, ChevronUp, 
   Video, Mic, VideoOff, MicOff, Monitor, Volume2, Trash2, PhoneOff, Users, 
   Smile, Hand, MoreVertical, MessageSquare, Paperclip, Clock, PictureInPicture,
-  Maximize, Activity, Settings, AlertOctagon, Heart, ThumbsUp, Check, CheckCheck, Camera
+  Maximize, Activity, Settings, AlertOctagon, Heart, ThumbsUp, Check, CheckCheck, Camera,
+  Pin, Image
 } from 'lucide-react';
 import HuddleModal from '../../../employee/HuddleModal';
 import '../../../ceo/CEO.css';
 import EmojiPicker from 'emoji-picker-react';
-import { Download } from 'lucide-react';
+import { Download, Copy } from 'lucide-react';
 
-
+const DEFAULT_CHAT_CHANNELS = [
+  {
+    id: 'general-channel',
+    name: '#general-channel',
+    label: 'Company General Room',
+    type: 'staff',
+    members: ['ceo'],
+    messages: []
+  }
+];
 
 export function HrMessagingView({ initialSelectedChannel, currentUser }) {
-  const userName = currentUser?.name || 'CEO';
+  const userName = currentUser?.name || 'HR Manager';
   const [huddlePeer, setHuddlePeer] = useState(null);
   const [dbChannels, setDbChannels] = useState([]);
 
@@ -23,14 +33,14 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
   const fetchChannelsAndMessages = async () => {
     const token = localStorage.getItem('nsg_jwt_token');
     try {
-      const res = await fetch('/api/hr-portal/chat/channels', {
+      const res = await fetch('/api/employee-portal/chat/channels', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const chans = await res.json();
         const loadedChannels = await Promise.all(chans.map(async (c) => {
           try {
-            const msgRes = await fetch(`/api/hr-portal/chat/channels/${c.id}/messages`, {
+            const msgRes = await fetch(`/api/employee-portal/chat/channels/${c.id}/messages`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (msgRes.ok) {
@@ -50,6 +60,8 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                     timestamp: new Date(tzFixed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     isMe: m.sender === userName || m.sender === userName + ' (CEO)' || m.sender === 'John Doe (CEO)' || m.sender === 'John Doe',
                     is_edited: m.is_edited,
+                    is_pinned: m.is_pinned,
+                    parent_id: m.parent_id,
                     deleted_at: m.deleted_at,
                     reactions: m.reactions,
                     seen_by: m.seen_by,
@@ -83,9 +95,9 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     fetchChannelsAndMessages();
   }, []);
   
-  // === NO MOCK DATA ===
-  const chatChannels = dbChannels;
-  const myChannels = chatChannels.filter(c => c.id === "general-channel" || (c.members && c.members.includes(String(currentUser?.id || 'ceo'))));
+  // === MOCK DATA ===
+  const chatChannels = dbChannels.length > 0 ? dbChannels : DEFAULT_CHAT_CHANNELS;
+  const myChannels = chatChannels; // CEO has access to ALL channels
 
   const [selectedChannel, setSelectedChannel] = useState(() => {
     if (initialSelectedChannel) return initialSelectedChannel;
@@ -93,10 +105,23 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
   });
 
   const [employees, setEmployees] = useState([]);
+  const [typingUsers, setTypingUsers] = useState({});
+  const typingTimeoutRef = useRef(null);
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      const queue = JSON.parse(localStorage.getItem('nsg_chat_queue') || '[]');
+      if (queue.length > 0) {
+        queue.forEach(msg => {
+          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+             socketRef.current.send(JSON.stringify(msg));
+          }
+        });
+        localStorage.removeItem('nsg_chat_queue');
+      }
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -127,7 +152,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     const fetchEmployees = async () => {
       const token = localStorage.getItem('nsg_jwt_token');
       try {
-        const res = await fetch('/api/hr-portal/chat/users', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch('/api/employee-portal/chat/users', { headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) setEmployees(await res.json());
       } catch (err) {
         console.error(err);
@@ -148,6 +173,40 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
   }, [currentChannel, selectedChannel, localDmMessages]);
 
   const [inputVal, setInputVal] = useState('');
+  const [activeThreadMessage, setActiveThreadMessage] = useState(null);
+  const [showMentionsPopup, setShowMentionsPopup] = useState(false);
+
+  const [forwardMessageModal, setForwardMessageModal] = useState(null);
+
+  const executeForwardMessage = (targetChannelId) => {
+    let fwdText = "[Forwarded]: " + (forwardMessageModal.text || '');
+    const msgPayload = {
+      type: 'new_message',
+      channel_id: targetChannelId,
+      text: fwdText,
+      sender: typeof currentUser !== 'undefined' && currentUser ? currentUser.name : (typeof ceoName !== 'undefined' ? ceoName : 'Unknown'),
+      attachment_url: forwardMessageModal.attachment_url || null,
+      attachment_type: forwardMessageModal.attachment_type || null,
+      parent_id: null,
+      mentions: null
+    };
+
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: 'new_message', ...msgPayload }));
+    } else {
+      const queue = JSON.parse(localStorage.getItem('nsg_chat_queue') || '[]');
+      queue.push({ type: 'new_message', ...msgPayload });
+      localStorage.setItem('nsg_chat_queue', JSON.stringify(queue));
+    }
+
+    setForwardMessageModal(null);
+    setSelectedChannel(targetChannelId); // Switch to the target channel
+  };
+  const [mentionsFilter, setMentionsFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const chatEndRef = useRef(null);
 
   // === CHANNEL MANAGEMENT ===
@@ -209,7 +268,21 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           return;
         }
 
-        if (eventType === 'message_delivered' || eventType === 'message_read' || eventType === 'update_message') {
+        if (eventType === 'typing_start') {
+           setTypingUsers(prev => ({ ...prev, [payload.channel_id]: [...new Set([...(prev[payload.channel_id] || []), payload.user])] }));
+           return;
+        }
+        if (eventType === 'typing_stop') {
+           setTypingUsers(prev => ({ ...prev, [payload.channel_id]: (prev[payload.channel_id] || []).filter(u => u !== payload.user) }));
+           return;
+        }
+
+        if (eventType === 'message_pinned') {
+          fetchChannelsAndMessages();
+          return;
+        }
+
+        if (eventType === 'message_delivered' || eventType === 'message_read' || eventType === 'update_message' || eventType === 'delete_message') {
           fetchChannelsAndMessages();
           return;
         }
@@ -221,7 +294,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           socketRef.current.send(JSON.stringify({ type: 'delivered', msg_id: newMsg.id }));
         }
 
-        const isCorporateChannel = chatChannels.some(c => c.id === newMsg.channel_id);
+        const isCorporateChannel = !newMsg.channel_id.startsWith('dm-');
 
         if (isCorporateChannel) {
           fetchChannelsAndMessages();
@@ -267,7 +340,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     return () => {
       socket.close();
     };
-  }, [chatChannels, employees]);
+  }, [employees]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -313,25 +386,46 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     setAttachmentPreview(null);
   };
 
+  const handleSearch = async (e) => {
+    if (e.key === 'Enter') {
+      if (!searchQuery.trim()) {
+        setSearchResults(null);
+        return;
+      }
+      setIsSearching(true);
+      try {
+        const token = localStorage.getItem('nsg_jwt_token');
+        const res = await fetch(`/api/employee-portal/chat/search?query=${encodeURIComponent(searchQuery)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data);
+        }
+      } catch (err) { console.error(err); }
+      setIsSearching(false);
+    }
+  };
+
   // Chat Send
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!isOnline) {
-      alert("You are offline. Cannot send messages without an internet connection.");
-      return;
-    }
     if (!inputVal.trim() && !attachmentFile) return;
 
     let attachUrl = null;
     let attachType = null;
 
     if (attachmentFile) {
+      if (!isOnline) {
+         alert("Cannot upload attachments while offline.");
+         return;
+      }
       setIsUploading(true);
       const formData = new FormData();
       formData.append("file", attachmentFile);
       try {
         const token = localStorage.getItem('nsg_jwt_token');
-        const res = await fetch('/api/hr-portal/chat/upload', {
+        const res = await fetch('/api/employee-portal/chat/upload', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
           body: formData
@@ -340,21 +434,60 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           const data = await res.json();
           attachUrl = data.url;
           attachType = data.type;
+        } else {
+          const errText = await res.text();
+          alert("Upload failed with status " + res.status + ": " + errText);
         }
-      } catch (err) { console.error("Upload failed", err); }
+      } catch (err) { 
+        console.error("Upload failed", err); 
+        alert("Upload failed: " + err.message);
+      }
       setIsUploading(false);
       clearAttachment();
     }
 
+    const mentionsMatch = inputVal.match(/@(\w+)/g);
+    const mentions = mentionsMatch ? JSON.stringify(mentionsMatch.map(m => m.substring(1))) : null;
+
+    const msgPayload = {
+      type: 'new_message',
+      channel_id: selectedChannel,
+      text: inputVal.trim(),
+      sender: userName,
+      attachment_url: attachUrl,
+      attachment_type: attachType,
+      parent_id: activeThreadMessage ? activeThreadMessage.id : null,
+      mentions: mentions
+    };
+
+    if (!isOnline) {
+      const queue = JSON.parse(localStorage.getItem('nsg_chat_queue') || '[]');
+      queue.push(msgPayload);
+      localStorage.setItem('nsg_chat_queue', JSON.stringify(queue));
+      
+      const offlineMsg = {
+        id: Date.now(),
+        sender: userName,
+        avatar: 'https://ui-avatars.com/api/?name=John+Doe&background=1e293b&color=fff',
+        text: inputVal.trim(),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isMe: true,
+        is_offline_queued: true
+      };
+      
+      const isCorporateChannel = chatChannels.some(c => c.id === selectedChannel);
+      if (isCorporateChannel) {
+        setDbChannels(prev => prev.map(c => c.id === selectedChannel ? { ...c, messages: [...(c.messages || []), offlineMsg] } : c));
+      } else {
+        setLocalDmMessages(prev => ({ ...prev, [selectedChannel]: [...(prev[selectedChannel] || []), offlineMsg] }));
+      }
+      setInputVal('');
+      return;
+    }
+
     // Send via WebSocket if connection is active
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        channel_id: selectedChannel,
-        text: inputVal.trim(),
-        sender: userName,
-        attachment_url: attachUrl,
-        attachment_type: attachType
-      }));
+      socketRef.current.send(JSON.stringify(msgPayload));
       setInputVal('');
       return;
     }
@@ -389,6 +522,27 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     }
     setInputVal('');
 
+    // Simulated reply
+    setTimeout(() => {
+      const isDM = selectedChannel.startsWith('dm-');
+      if (isDM) {
+        const senderName = employees.find(e => `dm-${e.id}` === selectedChannel)?.name || 'Colleague';
+        const senderAvatar = employees.find(e => `dm-${e.id}` === selectedChannel)?.avatar;
+
+        const autoReply = {
+          id: Date.now() + 1,
+          sender: senderName,
+          avatar: senderAvatar,
+          text: 'Got it! I will check that out shortly.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        
+        setLocalDmMessages(prev => ({
+          ...prev,
+          [selectedChannel]: [...(prev[selectedChannel] || []), autoReply]
+        }));
+      }
+    }, 2000);
   };
 
 
@@ -399,7 +553,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
       alert("You are offline. Cannot start video call without an internet connection.");
       return;
     }
-    setIsInCall(true);
+    // Only use HuddleModal, avoid the broken floating PIP
     setHuddlePeer({
       channelId: selectedChannel,
       roomName: isDM ? `DM-${employees.find(e => `dm-${e.id}` === selectedChannel)?.name}` : selectedChannel,
@@ -550,7 +704,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch('/api/hr-portal/chat/channels', {
+      await fetch('/api/employee-portal/chat/channels', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -568,7 +722,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
       console.error("Failed to save channel to backend:", err);
     }
 
-    const currentChannels = dbChannels;
+    const currentChannels = dbChannels.length > 0 ? dbChannels : DEFAULT_CHAT_CHANNELS;
     const updated = [...currentChannels, newChan];
     setDbChannels(updated);
     
@@ -577,7 +731,47 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     setSelectedChannel(newId);
   };
 
-  // Add Member logic
+  // Add/Remove Member logic for backend
+  const handleAddChannelMember = async (empId) => {
+    if (!currentChannel || isDM) return;
+    const updatedMembers = [...(currentChannel.members || []), String(empId)];
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      const res = await fetch(`/api/employee-portal/chat/channels/${currentChannel.id}/members`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members: updatedMembers })
+      });
+      if (res.ok) {
+        fetchChannelsAndMessages(); // Refreshes dbChannels
+      } else {
+        alert("Failed to add member.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRemoveChannelMember = async (empId) => {
+    if (!currentChannel || isDM) return;
+    const updatedMembers = (currentChannel.members || []).filter(id => String(id) !== String(empId));
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      const res = await fetch(`/api/employee-portal/chat/channels/${currentChannel.id}/members`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members: updatedMembers })
+      });
+      if (res.ok) {
+        fetchChannelsAndMessages(); // Refreshes dbChannels
+      } else {
+        alert("Failed to remove member.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleMemberInChannel = (empId) => {
     setChannelMembers(prev => {
       const currentMembers = prev[selectedChannel] || [];
@@ -595,7 +789,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch(`/api/hr-portal/chat/channels/${selectedChannel}`, {
+      const res = await fetch(`/api/employee-portal/chat/channels/${selectedChannel}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: '#' + formattedName.replace(/^#+/, ''), label: formattedName })
@@ -620,7 +814,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     if (window.confirm(`Are you sure you want to delete #${selectedChannel}?`)) {
       try {
         const token = localStorage.getItem('nsg_jwt_token');
-        const res = await fetch(`/api/hr-portal/chat/channels/${selectedChannel}`, {
+        const res = await fetch(`/api/employee-portal/chat/channels/${selectedChannel}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -660,14 +854,20 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     if(!newText.trim()) return;
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch(`/api/hr-portal/chat/messages/${msgId}`, {
+      const res = await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: newText.trim() })
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Edit failed:', res.status, err);
+        alert('Failed to edit message: ' + (err.detail || res.status));
+        return;
+      }
       setEditingMessageId(null);
       setEditingText('');
-      // WebSocket will trigger state update
+      fetchChannelsAndMessages();
     } catch (err) { console.error(err); }
   };
 
@@ -675,10 +875,16 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     if(!window.confirm("Delete this message?")) return;
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch(`/api/hr-portal/chat/messages/${msgId}`, {
+      const res = await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Failed to delete: ' + (err.detail || res.status));
+        return;
+      }
+      fetchChannelsAndMessages();
     } catch (err) { console.error(err); }
   };
 
@@ -698,7 +904,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
     
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch(`/api/hr-portal/chat/messages/${msgId}`, {
+      await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ reactions: JSON.stringify(reactionsObj) })
@@ -734,8 +940,30 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
   const isDM = selectedChannel.startsWith('dm-');
   const currentMembersCount = isDM ? 2 : (channelMembers[selectedChannel]?.length || 1);
 
+  const getUnreadCount = (channelId) => {
+    const msgs = messages[channelId] || [];
+    return msgs.filter(m => {
+       if (m.isMe || (m.sender && m.sender.includes('CEO'))) return false;
+       try {
+         const seenArr = m.seen_by ? JSON.parse(m.seen_by) : [];
+         return !seenArr.includes(userName);
+       } catch(e) { return true; }
+    }).length;
+  };
+
+  const renderMessageText = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(@\w+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('@')) {
+        return <span key={i} style={{ color: '#3B82F6', fontWeight: 800, background: 'rgba(59,130,246,0.1)', padding: '0 4px', borderRadius: '4px' }}>{part}</span>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#F8FAFC', borderRadius: '12px', border: '1px solid var(--ceo-border)' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 120px)', overflow: 'hidden', background: '#F8FAFC', borderRadius: '12px', border: '1px solid var(--ceo-border)' }}>
       
       {/* === LEFT SIDEBAR === */}
       <div style={{ width: '280px', background: '#FFFFFF', borderRight: '1px solid var(--ceo-border)', display: 'flex', flexDirection: 'column' }}>
@@ -754,7 +982,16 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           </div>
           <div style={{ position: 'relative' }}>
             <Search size={14} color="var(--ceo-text-muted)" style={{ position: 'absolute', left: '12px', top: '10px' }} />
-            <input type="text" placeholder="Search messages..." className="ceo-form-input" style={{ width: '100%', paddingLeft: '32px', height: '34px', fontSize: '13px' }} />
+            <input 
+              type="text" 
+              placeholder={isSearching ? "Searching..." : "Search messages..."} 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearch}
+              className="ceo-form-input" 
+              style={{ width: '100%', paddingLeft: '32px', height: '34px', fontSize: '13px' }} 
+              disabled={isSearching}
+            />
           </div>
         </div>
 
@@ -776,7 +1013,8 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                   fontSize: '14px', transition: 'all 0.2s'
                 }}
               >
-                <Hash size={16} /> {chan.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Hash size={16} /> {chan.name}</div>
+                {getUnreadCount(chan.id) > 0 && <span style={{ background: 'var(--ceo-danger)', color: '#FFF', fontSize: '11px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>{getUnreadCount(chan.id)}</span>}
               </div>
             ))}
           </div>
@@ -802,7 +1040,8 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                     <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}`)} alt={emp.name} style={{ width: '24px', height: '24px', borderRadius: '12px', objectFit: 'cover' }}  />
                     <div style={{ position: 'absolute', bottom: -2, right: -2, width: '8px', height: '8px', borderRadius: '4px', background: emp.status === 'Active' ? 'var(--ceo-success)' : 'var(--ceo-warning)', border: '2px solid #FFF' }}></div>
                   </div>
-                  {emp.name}
+                  <div style={{ flex: 1 }}>{emp.name}</div>
+                  {getUnreadCount(dmId) > 0 && <span style={{ background: 'var(--ceo-danger)', color: '#FFF', fontSize: '11px', fontWeight: 800, padding: '2px 6px', borderRadius: '10px' }}>{getUnreadCount(dmId)}</span>}
                 </div>
               );
             })}
@@ -836,7 +1075,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                   return <span>Offline</span>;
                 })()
               ) : (
-                <><Users size={12} /> {currentMembersCount} members (Click to view)</>
+                <><Users size={12} /> {currentChannel?.members ? currentChannel.members.length : 0} members (Click to view)</>
               )}
             </div>
           </div>
@@ -847,6 +1086,9 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                 <Users size={16} color="var(--ceo-primary)" /> Members
               </button>
             )}
+            <button onClick={() => setIsGalleryOpen(!isGalleryOpen)} className="ceo-btn" style={{ padding: '8px 16px', background: '#F8FAFC', border: '1px solid var(--ceo-border)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Image size={16} color="var(--ceo-primary)" /> Files & Media
+            </button>
             <button onClick={handleStartCall} className="ceo-btn" style={{ padding: '8px 16px', background: '#F8FAFC', border: '1px solid var(--ceo-border)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Video size={16} color="var(--ceo-primary)" /> Video Call
             </button>
@@ -870,6 +1112,41 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           </div>
         </div>
 
+        {/* Pinned Messages Banner */}
+        {(() => {
+          const pinnedMsgs = (messages[selectedChannel] || []).filter(m => m.is_pinned);
+          if (pinnedMsgs.length === 0) return null;
+          return (
+            <div style={{ background: '#FEF3C7', borderBottom: '1px solid #FDE68A', padding: '10px 24px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <Pin size={16} color="#D97706" style={{ marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                 <div style={{ fontSize: '11px', fontWeight: 800, color: '#D97706', textTransform: 'uppercase', marginBottom: '2px' }}>Pinned Messages ({pinnedMsgs.length})</div>
+                 <div style={{ fontSize: '13px', color: '#92400E', maxHeight: '40px', overflowY: 'auto' }}>
+                    {pinnedMsgs.map(pm => (
+                       <div 
+                         key={pm.id} 
+                         onClick={() => {
+                           const el = document.getElementById(`msg-${pm.id}`);
+                           if(el) {
+                             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                             el.style.backgroundColor = '#FEF3C7';
+                             setTimeout(() => el.style.backgroundColor = '', 2000);
+                           }
+                         }}
+                         style={{ display: 'flex', gap: '8px', marginBottom: '4px', cursor: 'pointer', transition: 'background-color 0.3s', padding: '2px 4px', borderRadius: '4px' }}
+                         onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(217, 119, 6, 0.1)'}
+                         onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                       >
+                          <strong>{pm.sender}:</strong>
+                          <span>{renderMessageText(pm.text)}</span>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Offline Banner */}
         {!isOnline && (
           <div style={{ background: '#FEE2E2', color: '#B91C1C', padding: '8px 24px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -879,16 +1156,37 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
         )}
 
         {/* Messages Feed */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px', background: '#F8FAFC' }}>
-          {(messages[selectedChannel] || []).length === 0 ? (
+        {searchResults ? (
+           <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#FFF' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--ceo-border)', paddingBottom: '16px' }}>
+                 <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Search Results for "{searchQuery}"</h2>
+                 <button onClick={() => { setSearchResults(null); setSearchQuery(''); setIsSearching(false); }} className="ceo-btn" style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}>Close Search</button>
+              </div>
+              {searchResults.length === 0 ? (
+                 <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--ceo-text-muted)' }}>No messages found.</div>
+              ) : (
+                 searchResults.map(res => (
+                    <div key={res.id} onClick={() => { setSelectedChannel(res.channel_id); setSearchResults(null); setSearchQuery(''); setIsSearching(false); }} style={{ padding: '16px', border: '1px solid var(--ceo-border)', borderRadius: '12px', cursor: 'pointer', background: '#F8FAFC' }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: 'var(--ceo-primary)' }}>{res.sender} <span style={{ color: 'var(--ceo-text-muted)' }}>in {res.channel_id}</span></strong>
+                          <span style={{ fontSize: '12px', color: 'var(--ceo-text-muted)' }}>{new Date(res.timestamp + (res.timestamp.endsWith('Z') ? '' : 'Z')).toLocaleString()}</span>
+                       </div>
+                       <div style={{ fontSize: '14px' }}>{renderMessageText(res.text)}</div>
+                    </div>
+                 ))
+              )}
+           </div>
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px', background: '#F8FAFC' }}>
+          {(messages[selectedChannel] || []).filter(m => !m.parent_id).length === 0 ? (
             <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--ceo-text-muted)' }}>
               <MessageSquare size={48} style={{ opacity: 0.2, margin: '0 auto 16px auto' }} />
               <div style={{ fontSize: '16px', fontWeight: 600 }}>No messages yet</div>
               <div style={{ fontSize: '13px' }}>Start the conversation!</div>
             </div>
           ) : (
-            (messages[selectedChannel] || []).map((msg, idx) => {
-              const isMsgMe = msg.isMe || (msg.sender && (msg.sender.includes('CEO')));
+            (messages[selectedChannel] || []).filter(m => !m.parent_id).map((msg, idx) => {
+              const isMsgMe = msg.isMe || (msg.sender && (msg.sender === userName || msg.sender.includes('CEO') || msg.sender.includes('HR') || msg.sender.toLowerCase() === 'hr' || msg.sender.includes('TL') || msg.sender.toLowerCase() === 'tl'));
               const isDeleted = !!msg.deleted_at;
               
               let parsedReactions = {};
@@ -896,14 +1194,14 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
               const hasReactions = Object.keys(parsedReactions).length > 0;
 
               return (
-                <div key={msg.id || idx} style={{ display: 'flex', gap: '16px', flexDirection: isMsgMe ? 'row-reverse' : 'row', position: 'relative' }} className="message-row"
+                <div key={msg.id || idx} style={{ display: 'flex', gap: '16px', flexDirection: isMsgMe ? 'row-reverse' : 'row', position: 'relative' }} className="message-row" id={`msg-${msg.id}`}
                      onDoubleClick={(e) => !isDeleted && handleMessageDoubleClick(e, msg)}
                      onContextMenu={(e) => { e.preventDefault(); if(!isDeleted) handleMessageDoubleClick(e, msg); }}
                 >
                   {(() => {
                     const senderEmp = employees.find(e => e.name === msg.sender);
                     const senderAvatar = senderEmp?.photo ? `http://localhost:8000${senderEmp.photo}` : (msg.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender)}`);
-                    return <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={senderAvatar} alt={msg.sender} style={{ width: '36px', height: '36px', borderRadius: '18px', border: '1px solid var(--ceo-border)', flexShrink: 0, objectFit: 'cover' }}  />;
+                    return <img src={senderAvatar} alt={msg.sender} style={{ width: '36px', height: '36px', borderRadius: '18px', border: '1px solid var(--ceo-border)', flexShrink: 0, objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender || 'User')}`; }} />;
                   })()}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMsgMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexDirection: isMsgMe ? 'row-reverse' : 'row' }}>
@@ -950,7 +1248,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                         ) : msg.isCallStatus ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isMsgMe ? '#FFF' : 'var(--ceo-primary)', fontWeight: '600' }}>
                             <Video size={16} />
-                            <span>{msg.text}</span>
+                            <span>{renderMessageText(msg.text)}</span>
                             <button 
                               type="button" 
                               style={{ marginLeft: '12px', padding: '6px 16px', borderRadius: '6px', backgroundColor: isMsgMe ? '#FFF' : 'var(--ceo-primary)', color: isMsgMe ? 'var(--ceo-primary)' : 'white', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}
@@ -977,7 +1275,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                                 )}
                               </div>
                             )}
-                            {msg.text && <span>{msg.text}</span>}
+                            {msg.text && <span>{renderMessageText(msg.text)}</span>}
                           </div>
                         )}
                       </div>
@@ -1002,9 +1300,20 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           )}
           <div ref={chatEndRef} />
         </div>
+        )}
 
         {/* Message Input */}
         <div style={{ padding: '20px 24px', background: '#FFF', borderTop: '1px solid var(--ceo-border)', position: 'relative' }}>
+          
+          {/* Typing Indicator */}
+          {typingUsers[selectedChannel] && typingUsers[selectedChannel].length > 0 && (
+            <div style={{ position: 'absolute', top: '-24px', left: '24px', fontSize: '12px', color: 'var(--ceo-text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', gap: '2px' }}>
+                 <span style={{ animation: 'pulse 1.5s infinite' }}>.</span><span style={{ animation: 'pulse 1.5s infinite 0.2s' }}>.</span><span style={{ animation: 'pulse 1.5s infinite 0.4s' }}>.</span>
+              </div>
+              {typingUsers[selectedChannel].join(', ')} {typingUsers[selectedChannel].length > 1 ? 'are' : 'is'} typing...
+            </div>
+          )}
           
           {/* Attachment Preview */}
           {attachmentFile && (
@@ -1020,14 +1329,48 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
               <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
               <Paperclip size={18} color="var(--ceo-text-muted)" />
             </label>
-            <input 
-              type="text" 
-              value={inputVal} 
-              onChange={e => setInputVal(e.target.value)} 
-              placeholder={`Message ${selectedChannel.startsWith('dm-') ? '@' + employees.find(e => `dm-${e.id}` === selectedChannel)?.name : '#' + selectedChannel}`}
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '14px', padding: '8px 0', color: 'var(--ceo-text-primary)' }} 
-              disabled={isUploading}
-            />
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input 
+                type="text" 
+                value={inputVal} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setInputVal(val);
+                  const atMatch = val.match(/@(\w*)$/);
+                  if (atMatch && !selectedChannel.startsWith('dm-')) {
+                    setShowMentionsPopup(true);
+                    setMentionsFilter(atMatch[1].toLowerCase());
+                  } else {
+                    setShowMentionsPopup(false);
+                  }
+                  if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(JSON.stringify({ type: 'typing_start', channel_id: selectedChannel, sender: userName }));
+                    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = setTimeout(() => {
+                      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                        socketRef.current.send(JSON.stringify({ type: 'typing_stop', channel_id: selectedChannel, sender: userName }));
+                      }
+                    }, 2000);
+                  }
+                }} 
+                placeholder={`Message ${selectedChannel.startsWith('dm-') ? '@' + employees.find(e => `dm-${e.id}` === selectedChannel)?.name : '#' + selectedChannel}`}
+                style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontSize: '14px', padding: '8px 0', color: 'var(--ceo-text-primary)' }} 
+                disabled={isUploading}
+              />
+              {showMentionsPopup && (
+                <div style={{ position: 'absolute', bottom: '100%', left: 0, background: '#FFF', borderRadius: '8px', border: '1px solid var(--ceo-border)', boxShadow: '0 -4px 10px rgba(0,0,0,0.1)', zIndex: 3000, width: '250px', maxHeight: '150px', overflowY: 'auto' }}>
+                  {employees.filter(e => e.name.toLowerCase().includes(mentionsFilter)).map(emp => (
+                    <div key={emp.id} onClick={() => {
+                       setInputVal(prev => prev.replace(/@\w*$/, `@${emp.name.replace(/\s+/g, '')} `));
+                       setShowMentionsPopup(false);
+                    }} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--ceo-divider)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}`)} alt="" style={{ width: '20px', height: '20px', borderRadius: '10px' }}  />
+                      <span style={{ fontSize: '13px', fontWeight: 600 }}>{emp.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => setShowChatEmojiPicker(!showChatEmojiPicker)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px' }}><Smile size={18} color="var(--ceo-text-muted)" /></button>
             
             {showChatEmojiPicker && (
@@ -1047,6 +1390,90 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           </form>
         </div>
       </div>
+      
+      {/* Right Thread Panel */}
+      {activeThreadMessage && (
+        <div style={{ width: '320px', background: '#FFF', borderLeft: '1px solid var(--ceo-border)', display: 'flex', flexDirection: 'column' }}>
+           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>Thread</h3>
+             <button onClick={() => setActiveThreadMessage(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--ceo-text-muted)" /></button>
+           </div>
+           <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <div style={{ paddingBottom: '20px', borderBottom: '1px solid var(--ceo-divider)', marginBottom: '20px' }}>
+                 <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>{activeThreadMessage.sender}</div>
+                 <div style={{ fontSize: '14px', lineHeight: 1.5 }}>{renderMessageText(activeThreadMessage.text)}</div>
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ceo-text-muted)', marginBottom: '16px' }}>REPLIES</div>
+              {(messages[selectedChannel] || []).filter(m => m.parent_id === activeThreadMessage.id).map(msg => (
+                 <div key={msg.id} style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '16px', background: 'var(--ceo-primary)', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>{msg.sender.charAt(0)}</div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '2px' }}>{msg.sender} <span style={{ fontSize: '11px', color: 'var(--ceo-text-muted)', fontWeight: 'normal' }}>{msg.timestamp || msg.time}</span></div>
+                      <div style={{ fontSize: '14px', lineHeight: 1.5 }}>{renderMessageText(msg.text)}</div>
+                    </div>
+                 </div>
+              ))}
+           </div>
+           <div style={{ padding: '16px', borderTop: '1px solid var(--ceo-border)' }}>
+             <input type="text" placeholder="Reply..." onKeyDown={e => {
+                if (e.key === 'Enter' && e.target.value.trim()) {
+                   const payload = { type: 'new_message', channel_id: selectedChannel, sender: userName, text: e.target.value.trim(), parent_id: activeThreadMessage.id };
+                   if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                      socketRef.current.send(JSON.stringify(payload));
+                   }
+                   e.target.value = '';
+                }
+             }} style={{ width: '100%', padding: '12px', border: '1px solid var(--ceo-border)', borderRadius: '8px', outline: 'none', fontSize: '13px' }} />
+           </div>
+        </div>
+      )}
+
+      {/* Right Media Gallery Panel */}
+      {isGalleryOpen && (
+        <div style={{ width: '320px', background: '#FFF', borderLeft: '1px solid var(--ceo-border)', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}><Image size={18} color="var(--ceo-primary)" /> Files & Media</h3>
+             <button onClick={() => setIsGalleryOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--ceo-text-muted)" /></button>
+           </div>
+           <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              {(() => {
+                const mediaMsgs = (messages[selectedChannel] || []).filter(m => m.attachment_url);
+                if (mediaMsgs.length === 0) return <div style={{ textAlign: 'center', color: 'var(--ceo-text-muted)', marginTop: '40px' }}>No files shared yet.</div>;
+                
+                const images = mediaMsgs.filter(m => m.attachment_type === 'image');
+                const others = mediaMsgs.filter(m => m.attachment_type !== 'image');
+
+                return (
+                  <div>
+                    {images.length > 0 && (
+                      <div style={{ marginBottom: '24px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ceo-text-muted)', marginBottom: '12px' }}>IMAGES</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {images.map(m => (
+                             <img key={m.id} onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={`http://localhost:8000${m.attachment_url}`} alt="media" style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer' }} onClick={() => setLightboxMedia({ url: `http://localhost:8000${m.attachment_url}`, type: 'image' })} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {others.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ceo-text-muted)', marginBottom: '12px' }}>DOCUMENTS</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {others.map(m => (
+                             <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#F8FAFC', border: '1px solid var(--ceo-border)', borderRadius: '8px' }}>
+                                <Paperclip size={16} color="var(--ceo-text-muted)" />
+                                <a href={`http://localhost:8000${m.attachment_url}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: 'var(--ceo-primary)', textDecoration: 'none', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachment_url.split('/').pop()}</a>
+                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+           </div>
+        </div>
+      )}
 
       {/* === FLOATING CALL OVERLAY / PIP === */}
       {isInCall && !isCallExpanded && (
@@ -1181,7 +1608,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                       </>
                     ) : (
                       <>
-                        <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || "User")}&background=random`)} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}  />
+                        <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || 'User')}&background=random`)} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}  />
                         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 40%)' }}></div>
                       </>
                     )}
@@ -1212,7 +1639,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                     return (
                       <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || "User")}&background=random`)} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px' }}  />
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || 'User')}&background=random`)} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px' }}  />
                           <div style={{ color: '#F8FAFC', fontSize: '14px', fontWeight: 600 }}>{emp.name} {emp.isMe && '(You)'}</div>
                         </div>
                         {emp.isMe ? (callScreenMic ? <Mic size={16} color="#10B981" /> : <MicOff size={16} color="#EF4444" />) : <Mic size={16} color="#10B981" />}
@@ -1230,7 +1657,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                     return (
                       <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: 0.5 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || "User")}&background=random`)} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px', filter: 'grayscale(100%)' }}  />
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || 'User')}&background=random`)} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px', filter: 'grayscale(100%)' }}  />
                           <div style={{ color: '#F8FAFC', fontSize: '14px', fontWeight: 600 }}>{emp.name}</div>
                         </div>
                         <div style={{ color: '#94A3B8', fontSize: '12px', fontWeight: 600 }}>Offline</div>
@@ -1312,7 +1739,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                           }
                         }}
                       />
-                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || "User")}&background=random`)} alt={emp.name} style={{ width: '24px', height: '24px', borderRadius: '12px' }}  />
+                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || 'User')}&background=random`)} alt={emp.name} style={{ width: '24px', height: '24px', borderRadius: '12px' }}  />
                       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>{emp.name}</span>
                     </label>
                   ))}
@@ -1385,7 +1812,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
                 return (
                   <div key={emp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid var(--ceo-border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || "User")}&background=random`)} alt={emp.name} style={{ width: '32px', height: '32px', borderRadius: '16px' }}  />
+                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name || 'User')}&background=random`)} alt={emp.name} style={{ width: '32px', height: '32px', borderRadius: '16px' }}  />
                       <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>{emp.name} {emp.isMe && '(You)'}</div>
                     </div>
                     <button 
@@ -1436,7 +1863,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           <div 
             style={{ 
               position: 'absolute', 
-              top: contextMenu.y, 
+              top: Math.min(contextMenu.y, window.innerHeight - 300), 
               left: Math.min(contextMenu.x, window.innerWidth - 200), // prevent going off-screen
               background: '#FFF', 
               borderRadius: '12px', 
@@ -1454,6 +1881,35 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
             </div>
             
             <button 
+              onClick={() => { 
+                navigator.clipboard.writeText(contextMenu.msg.text || '');
+                closeContextMenu();
+              }} 
+              style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
+            >
+              <Copy size={16} /> Copy Message
+            </button>
+
+            <button 
+              onClick={() => { setActiveThreadMessage(contextMenu.msg); closeContextMenu(); }} 
+              style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
+            >
+              <MessageSquare size={16} /> Reply in Thread
+            </button>
+
+            <button 
+              onClick={() => {
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                  socketRef.current.send(JSON.stringify({ type: 'pin_message', msg_id: contextMenu.msg.id, channel_id: selectedChannel, is_pinned: !contextMenu.msg.is_pinned }));
+                }
+                closeContextMenu();
+              }} 
+              style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
+            >
+              <Pin size={16} /> {contextMenu.msg.is_pinned ? 'Unpin Message' : 'Pin Message'}
+            </button>
+
+            <button 
               onClick={() => { setShowEmojiPicker(contextMenu.msg.id); }} 
               style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
             >
@@ -1462,9 +1918,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
 
             <button 
               onClick={() => { 
-                let fwdText = `[Forwarded]: ${contextMenu.msg.text || ''}`;
-                if (contextMenu.msg.attachment_url) fwdText += ` (Attachment: http://localhost:8000${contextMenu.msg.attachment_url})`;
-                setInputVal(fwdText.trim());
+                setForwardMessageModal(contextMenu.msg);
                 closeContextMenu();
               }} 
               style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
@@ -1473,7 +1927,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
             </button>
 
             {/* If it's my message, I can edit/delete */}
-            {(contextMenu.msg.isMe || (contextMenu.msg.sender && contextMenu.msg.sender.includes('CEO'))) && (
+            {(contextMenu.msg.isMe || (contextMenu.msg.sender && (contextMenu.msg.sender === userName || contextMenu.msg.sender.includes('CEO') || contextMenu.msg.sender.toLowerCase() === 'ceo' || contextMenu.msg.sender.includes('HR') || contextMenu.msg.sender.toLowerCase() === 'hr' || contextMenu.msg.sender.includes('TL') || contextMenu.msg.sender.toLowerCase() === 'tl'))) && (
               <>
                 <button 
                   onClick={() => { setEditingMessageId(contextMenu.msg.id); setEditingText(contextMenu.msg.text); closeContextMenu(); }} 
@@ -1528,36 +1982,70 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
       {/* Group Members Modal */}
       {showGroupMembersModal && currentChannel && !isDM && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: '16px', width: '400px', maxWidth: '90%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#FFF', borderRadius: '16px', width: '450px', maxWidth: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ceo-text-primary)' }}>Group Members</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ceo-text-primary)' }}>Manage Channel Members</h3>
               <button onClick={() => setShowGroupMembersModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={20} color="var(--ceo-text-muted)" /></button>
             </div>
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {(currentChannel.members || []).map(empId => {
-                const emp = employees.find(e => String(e.id) === String(empId) || e.id === empId);
-                const name = emp ? emp.name : (empId === 'ceo' ? 'CEO' : (empId === 'hr' ? 'HR Manager' : `Emp #${empId}`));
-                const avatar = emp?.photo ? `http://localhost:8000${emp.photo}` : (emp?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`);
-                return (
-                  <div key={empId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={name} style={{ width: '40px', height: '40px', borderRadius: '20px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{name}</div>
-                    </div>
-                    {empId !== 'ceo' && (
-                      <button 
-                        onClick={() => {
-                          setSelectedChannel(`dm-${empId}`);
-                          setShowGroupMembersModal(false);
-                        }}
-                        style={{ padding: '6px 12px', background: '#F1F5F9', border: '1px solid var(--ceo-border)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: 'var(--ceo-text-primary)', display: 'flex', gap: '6px', alignItems: 'center' }}
-                      >
-                        <MessageSquare size={14} /> Message
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+            
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              
+              {/* IN CHANNEL */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ceo-text-secondary)', marginBottom: '16px', letterSpacing: '0.5px' }}>IN CHANNEL ({(currentChannel.members || []).length})</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {(currentChannel.members || []).map(empId => {
+                    const emp = employees.find(e => String(e.id) === String(empId) || e.id === empId);
+                    const name = emp ? emp.name : (empId === 'ceo' ? 'CEO' : (empId === 'hr' ? 'HR Manager' : `Emp #${empId}`));
+                    const avatar = emp?.photo ? `http://localhost:8000${emp.photo}` : (emp?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`);
+                    return (
+                      <div key={`in-${empId}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={name} style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{name}</div>
+                        </div>
+                        {empId !== 'ceo' && (
+                          <button 
+                            onClick={() => handleRemoveChannelMember(empId)}
+                            style={{ padding: '6px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#EF4444', transition: 'all 0.2s' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(currentChannel.members || []).length === 0 && <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)' }}>No members yet.</div>}
+                </div>
+              </div>
+
+              {/* NOT IN CHANNEL */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ceo-text-secondary)', marginBottom: '16px', letterSpacing: '0.5px' }}>NOT IN CHANNEL</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {employees.filter(e => !(currentChannel.members || []).includes(String(e.id)) && !(currentChannel.members || []).includes(e.id)).map(emp => {
+                    const avatar = emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}`);
+                    return (
+                      <div key={`out-${emp.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{emp.name}</div>
+                        </div>
+                        <button 
+                          onClick={() => handleAddChannelMember(emp.id)}
+                          style={{ padding: '6px 16px', background: 'var(--ceo-primary)', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#FFF', transition: 'all 0.2s' }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {employees.filter(e => !(currentChannel.members || []).includes(String(e.id)) && !(currentChannel.members || []).includes(e.id)).length === 0 && (
+                    <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)' }}>All employees are in this channel.</div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1568,6 +2056,34 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
           peer={huddlePeer} 
           onClose={() => setHuddlePeer(null)} 
         />
+      )}
+
+    
+      {forwardMessageModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#FFF', width: '400px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Forward Message To...</h3>
+            <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)', background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', fontStyle: 'italic' }}>
+               "{forwardMessageModal.text}"
+               {forwardMessageModal.attachment_url && <div style={{marginTop: '4px', color: 'var(--ceo-primary)'}}>[Attachment Included]</div>}
+            </div>
+            <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '8px' }}>
+               <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ceo-text-muted)' }}>CHANNELS</div>
+               {(typeof dbChannels !== 'undefined' ? dbChannels : (typeof chatChannels !== 'undefined' ? chatChannels : [])).map(c => (
+                  <button key={"fwd-"+c.id} onClick={() => executeForwardMessage(c.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'transparent', border: '1px solid var(--ceo-border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>
+                    <Hash size={16} color="var(--ceo-text-muted)"/> {c.name}
+                  </button>
+               ))}
+               <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ceo-text-muted)', marginTop: '8px' }}>DIRECT MESSAGES</div>
+               {(typeof employees !== 'undefined' ? employees : []).filter(e => !e.isMe).map(e => (
+                  <button key={"fwd-dm-"+e.id} onClick={() => executeForwardMessage("dm-"+e.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'transparent', border: '1px solid var(--ceo-border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>
+                    <img src={e.photo ? "http://localhost:8000"+e.photo : (e.avatar || "https://ui-avatars.com/api/?name="+e.name.replace(' ', '+'))} alt="" style={{width: '24px', height: '24px', borderRadius: '12px', objectFit: 'cover'}} onError={(ev)=>{ev.target.onerror=null;ev.target.src="https://ui-avatars.com/api/?name="+e.name.replace(' ', '+');}} /> {e.name}
+                  </button>
+               ))}
+            </div>
+            <button onClick={() => setForwardMessageModal(null)} style={{ padding: '12px', background: '#E2E8F0', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', color: 'var(--ceo-text-primary)' }}>Cancel</button>
+          </div>
+        </div>
       )}
 
     </div>

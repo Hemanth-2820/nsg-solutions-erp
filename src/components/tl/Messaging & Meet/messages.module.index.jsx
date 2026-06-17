@@ -51,6 +51,8 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
                     timestamp: new Date(tzFixed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     isMe: m.sender === tlName || m.sender === tlName + ' (TL)' || m.sender === 'John Doe (TL)' || m.sender === 'John Doe',
                     is_edited: m.is_edited,
+                    is_pinned: m.is_pinned,
+                    parent_id: m.parent_id,
                     deleted_at: m.deleted_at,
                     reactions: m.reactions,
                     seen_by: m.seen_by,
@@ -163,6 +165,33 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
   const [inputVal, setInputVal] = useState('');
   const [activeThreadMessage, setActiveThreadMessage] = useState(null);
   const [showMentionsPopup, setShowMentionsPopup] = useState(false);
+
+  const [forwardMessageModal, setForwardMessageModal] = useState(null);
+
+  const executeForwardMessage = (targetChannelId) => {
+    let fwdText = "[Forwarded]: " + (forwardMessageModal.text || '');
+    const msgPayload = {
+      type: 'new_message',
+      channel_id: targetChannelId,
+      text: fwdText,
+      sender: typeof currentUser !== 'undefined' && currentUser ? currentUser.name : (typeof ceoName !== 'undefined' ? ceoName : 'Unknown'),
+      attachment_url: forwardMessageModal.attachment_url || null,
+      attachment_type: forwardMessageModal.attachment_type || null,
+      parent_id: null,
+      mentions: null
+    };
+
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: 'new_message', ...msgPayload }));
+    } else {
+      const queue = JSON.parse(localStorage.getItem('nsg_chat_queue') || '[]');
+      queue.push({ type: 'new_message', ...msgPayload });
+      localStorage.setItem('nsg_chat_queue', JSON.stringify(queue));
+    }
+
+    setForwardMessageModal(null);
+    setSelectedChannel(targetChannelId); // Switch to the target channel
+  };
   const [mentionsFilter, setMentionsFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
@@ -243,7 +272,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
           return;
         }
 
-        if (eventType === 'message_delivered' || eventType === 'message_read' || eventType === 'update_message') {
+        if (eventType === 'message_delivered' || eventType === 'message_read' || eventType === 'update_message' || eventType === 'delete_message') {
           fetchChannelsAndMessages();
           return;
         }
@@ -395,8 +424,14 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
           const data = await res.json();
           attachUrl = data.url;
           attachType = data.type;
+        } else {
+          const errText = await res.text();
+          alert("Upload failed with status " + res.status + ": " + errText);
         }
-      } catch (err) { console.error("Upload failed", err); }
+      } catch (err) { 
+        console.error("Upload failed", err); 
+        alert("Upload failed: " + err.message);
+      }
       setIsUploading(false);
       clearAttachment();
     }
@@ -405,6 +440,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
     const mentions = mentionsMatch ? JSON.stringify(mentionsMatch.map(m => m.substring(1))) : null;
 
     const msgPayload = {
+      type: 'new_message',
       channel_id: selectedChannel,
       text: inputVal.trim(),
       sender: tlName,
@@ -507,7 +543,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
       alert("You are offline. Cannot start video call without an internet connection.");
       return;
     }
-    setIsInCall(true);
+    // Only use HuddleModal, avoid the broken floating PIP
     setHuddlePeer({
       channelId: selectedChannel,
       roomName: isDM ? `DM-${employees.find(e => `dm-${e.id}` === selectedChannel)?.name}` : selectedChannel,
@@ -768,14 +804,20 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
     if(!newText.trim()) return;
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
+      const res = await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: newText.trim() })
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Edit failed:', res.status, err);
+        alert('Failed to edit message: ' + (err.detail || res.status));
+        return;
+      }
       setEditingMessageId(null);
       setEditingText('');
-      // WebSocket will trigger state update
+      fetchChannelsAndMessages();
     } catch (err) { console.error(err); }
   };
 
@@ -783,10 +825,16 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
     if(!window.confirm("Delete this message?")) return;
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
+      const res = await fetch(`/api/employee-portal/chat/messages/${msgId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Failed to delete: ' + (err.detail || res.status));
+        return;
+      }
+      fetchChannelsAndMessages();
     } catch (err) { console.error(err); }
   };
 
@@ -865,7 +913,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#F8FAFC', borderRadius: '12px', border: '1px solid var(--ceo-border)' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 120px)', overflow: 'hidden', background: '#F8FAFC', borderRadius: '12px', border: '1px solid var(--ceo-border)' }}>
       
       {/* === LEFT SIDEBAR === */}
       <div style={{ width: '280px', background: '#FFFFFF', borderRight: '1px solid var(--ceo-border)', display: 'flex', flexDirection: 'column' }}>
@@ -1025,7 +1073,20 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#D97706', textTransform: 'uppercase', marginBottom: '2px' }}>Pinned Messages ({pinnedMsgs.length})</div>
                  <div style={{ fontSize: '13px', color: '#92400E', maxHeight: '40px', overflowY: 'auto' }}>
                     {pinnedMsgs.map(pm => (
-                       <div key={pm.id} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+                       <div 
+                         key={pm.id} 
+                         onClick={() => {
+                           const el = document.getElementById(`msg-${pm.id}`);
+                           if(el) {
+                             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                             el.style.backgroundColor = '#FEF3C7';
+                             setTimeout(() => el.style.backgroundColor = '', 2000);
+                           }
+                         }}
+                         style={{ display: 'flex', gap: '8px', marginBottom: '4px', cursor: 'pointer', transition: 'background-color 0.3s', padding: '2px 4px', borderRadius: '4px' }}
+                         onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(217, 119, 6, 0.1)'}
+                         onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                       >
                           <strong>{pm.sender}:</strong>
                           <span>{renderMessageText(pm.text)}</span>
                        </div>
@@ -1075,7 +1136,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
             </div>
           ) : (
             (messages[selectedChannel] || []).filter(m => !m.parent_id).map((msg, idx) => {
-              const isMsgMe = msg.isMe || (msg.sender && (msg.sender.includes('TL')));
+              const isMsgMe = msg.isMe || (msg.sender && (msg.sender === tlName || msg.sender.includes('CEO') || msg.sender.includes('HR') || msg.sender.toLowerCase() === 'hr' || msg.sender.includes('TL') || msg.sender.toLowerCase() === 'tl' || msg.sender.includes('TL')));
               const isDeleted = !!msg.deleted_at;
               
               let parsedReactions = {};
@@ -1083,7 +1144,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
               const hasReactions = Object.keys(parsedReactions).length > 0;
 
               return (
-                <div key={msg.id || idx} style={{ display: 'flex', gap: '16px', flexDirection: isMsgMe ? 'row-reverse' : 'row', position: 'relative' }} className="message-row"
+                <div key={msg.id || idx} style={{ display: 'flex', gap: '16px', flexDirection: isMsgMe ? 'row-reverse' : 'row', position: 'relative' }} className="message-row" id={`msg-${msg.id}`}
                      onDoubleClick={(e) => !isDeleted && handleMessageDoubleClick(e, msg)}
                      onContextMenu={(e) => { e.preventDefault(); if(!isDeleted) handleMessageDoubleClick(e, msg); }}
                 >
@@ -1752,7 +1813,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
           <div 
             style={{ 
               position: 'absolute', 
-              top: contextMenu.y, 
+              top: Math.min(contextMenu.y, window.innerHeight - 300), 
               left: Math.min(contextMenu.x, window.innerWidth - 200), // prevent going off-screen
               background: '#FFF', 
               borderRadius: '12px', 
@@ -1807,9 +1868,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
 
             <button 
               onClick={() => { 
-                let fwdText = `[Forwarded]: ${contextMenu.msg.text || ''}`;
-                if (contextMenu.msg.attachment_url) fwdText += ` (Attachment: http://localhost:8000${contextMenu.msg.attachment_url})`;
-                setInputVal(fwdText.trim());
+                setForwardMessageModal(contextMenu.msg);
                 closeContextMenu();
               }} 
               style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--ceo-divider)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
@@ -1818,7 +1877,7 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
             </button>
 
             {/* If it's my message, I can edit/delete */}
-            {(contextMenu.msg.isMe || (contextMenu.msg.sender && contextMenu.msg.sender.includes('TL'))) && (
+            {(contextMenu.msg.isMe || (contextMenu.msg.sender && (contextMenu.msg.sender === tlName || contextMenu.msg.sender.includes('TL') || contextMenu.msg.sender.includes('CEO') || contextMenu.msg.sender.toLowerCase() === 'ceo' || contextMenu.msg.sender.includes('HR') || contextMenu.msg.sender.toLowerCase() === 'hr' || contextMenu.msg.sender.includes('TL') || contextMenu.msg.sender.toLowerCase() === 'tl'))) && (
               <>
                 <button 
                   onClick={() => { setEditingMessageId(contextMenu.msg.id); setEditingText(contextMenu.msg.text); closeContextMenu(); }} 
@@ -1913,6 +1972,34 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
           peer={huddlePeer} 
           onClose={() => setHuddlePeer(null)} 
         />
+      )}
+
+    
+      {forwardMessageModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#FFF', width: '400px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Forward Message To...</h3>
+            <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)', background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', fontStyle: 'italic' }}>
+               "{forwardMessageModal.text}"
+               {forwardMessageModal.attachment_url && <div style={{marginTop: '4px', color: 'var(--ceo-primary)'}}>[Attachment Included]</div>}
+            </div>
+            <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '8px' }}>
+               <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ceo-text-muted)' }}>CHANNELS</div>
+               {(typeof dbChannels !== 'undefined' ? dbChannels : (typeof chatChannels !== 'undefined' ? chatChannels : [])).map(c => (
+                  <button key={"fwd-"+c.id} onClick={() => executeForwardMessage(c.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'transparent', border: '1px solid var(--ceo-border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>
+                    <Hash size={16} color="var(--ceo-text-muted)"/> {c.name}
+                  </button>
+               ))}
+               <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ceo-text-muted)', marginTop: '8px' }}>DIRECT MESSAGES</div>
+               {(typeof employees !== 'undefined' ? employees : []).filter(e => !e.isMe).map(e => (
+                  <button key={"fwd-dm-"+e.id} onClick={() => executeForwardMessage("dm-"+e.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'transparent', border: '1px solid var(--ceo-border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}>
+                    <img src={e.photo ? "http://localhost:8000"+e.photo : (e.avatar || "https://ui-avatars.com/api/?name="+e.name.replace(' ', '+'))} alt="" style={{width: '24px', height: '24px', borderRadius: '12px', objectFit: 'cover'}} onError={(ev)=>{ev.target.onerror=null;ev.target.src="https://ui-avatars.com/api/?name="+e.name.replace(' ', '+');}} /> {e.name}
+                  </button>
+               ))}
+            </div>
+            <button onClick={() => setForwardMessageModal(null)} style={{ padding: '12px', background: '#E2E8F0', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', color: 'var(--ceo-text-primary)' }}>Cancel</button>
+          </div>
+        </div>
       )}
 
     </div>
