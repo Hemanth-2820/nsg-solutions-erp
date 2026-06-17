@@ -756,46 +756,26 @@ def get_employees(current_user: models.User = Depends(security.get_current_user)
     return db.query(models.User).filter(models.User.role.in_(["employee", "tl", "hr"])).offset(skip).limit(limit).all()
 
 @router.get("/departments")
-def get_departments(current_user: models.User = Depends(security.get_current_user)):
+def get_departments(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
-    return [
-        {"id": 1, "name": "Engineering"},
-        {"id": 2, "name": "Human Resources"},
-        {"id": 3, "name": "Sales"},
-        {"id": 4, "name": "Marketing"},
-        {"id": 5, "name": "Operations"},
-        {"id": 6, "name": "Finance"},
-        {"id": 7, "name": "Product"},
-    ]
+    depts = db.query(models.Department).all()
+    return [{"id": d.id, "name": d.name} for d in depts]
 
 @router.get("/designations")
-def get_designations(current_user: models.User = Depends(security.get_current_user)):
+def get_designations(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
-    return [
-        {"id": 1, "name": "Software Engineer", "dept": "Engineering"},
-        {"id": 2, "name": "Senior Software Engineer", "dept": "Engineering"},
-        {"id": 3, "name": "Engineering Manager", "dept": "Engineering"},
-        {"id": 4, "name": "System Administrator", "dept": "Engineering"},
-        {"id": 5, "name": "HR Executive", "dept": "Human Resources"},
-        {"id": 6, "name": "HR Manager", "dept": "Human Resources"},
-        {"id": 7, "name": "Sales Representative", "dept": "Sales"},
-        {"id": 8, "name": "Sales Manager", "dept": "Sales"},
-        {"id": 9, "name": "Marketing Specialist", "dept": "Marketing"},
-        {"id": 10, "name": "Product Manager", "dept": "Product"},
-        {"id": 11, "name": "Operations Executive", "dept": "Operations"},
-        {"id": 12, "name": "Financial Analyst", "dept": "Finance"},
-        {"id": 13, "name": "CEO", "dept": "Operations"},
-    ]
+    desigs = db.query(models.Designation).all()
+    res = []
+    for d in desigs:
+        dept = db.query(models.Department).filter(models.Department.id == d.department_id).first()
+        res.append({"id": d.id, "name": d.name, "dept": dept.name if dept else "Unknown"})
+    return res
 
 @router.get("/shifts")
-def get_shifts(current_user: models.User = Depends(security.get_current_user)):
+def get_shifts(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
-    return [
-        {"id": 1, "name": "General (09:00 AM - 06:00 PM)"},
-        {"id": 2, "name": "Morning (06:00 AM - 03:00 PM)"},
-        {"id": 3, "name": "Evening (02:00 PM - 11:00 PM)"},
-        {"id": 4, "name": "Night (10:00 PM - 07:00 AM)"},
-    ]
+    shifts = db.query(models.Shift).all()
+    return [{"id": s.id, "name": f"{s.name} ({s.start_time} - {s.end_time})"} for s in shifts]
 
 @router.get("/team-leads", response_model=List[EmployeeResponse])
 def get_team_leads(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
