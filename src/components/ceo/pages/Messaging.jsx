@@ -265,7 +265,7 @@ export default function Messaging({ initialSelectedChannel, currentUser }) {
           socketRef.current.send(JSON.stringify({ type: 'delivered', msg_id: newMsg.id }));
         }
 
-        const isCorporateChannel = chatChannels.some(c => c.id === newMsg.channel_id);
+        const isCorporateChannel = !newMsg.channel_id.startsWith('dm-');
 
         if (isCorporateChannel) {
           fetchChannelsAndMessages();
@@ -311,7 +311,7 @@ export default function Messaging({ initialSelectedChannel, currentUser }) {
     return () => {
       socket.close();
     };
-  }, [chatChannels, employees]);
+  }, [employees]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -695,7 +695,47 @@ export default function Messaging({ initialSelectedChannel, currentUser }) {
     setSelectedChannel(newId);
   };
 
-  // Add Member logic
+  // Add/Remove Member logic for backend
+  const handleAddChannelMember = async (empId) => {
+    if (!currentChannel || isDM) return;
+    const updatedMembers = [...(currentChannel.members || []), String(empId)];
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      const res = await fetch(`/api/employee-portal/chat/channels/${currentChannel.id}/members`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members: updatedMembers })
+      });
+      if (res.ok) {
+        fetchChannelsAndMessages(); // Refreshes dbChannels
+      } else {
+        alert("Failed to add member.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRemoveChannelMember = async (empId) => {
+    if (!currentChannel || isDM) return;
+    const updatedMembers = (currentChannel.members || []).filter(id => String(id) !== String(empId));
+    try {
+      const token = localStorage.getItem('nsg_jwt_token');
+      const res = await fetch(`/api/employee-portal/chat/channels/${currentChannel.id}/members`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members: updatedMembers })
+      });
+      if (res.ok) {
+        fetchChannelsAndMessages(); // Refreshes dbChannels
+      } else {
+        alert("Failed to remove member.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleMemberInChannel = (empId) => {
     setChannelMembers(prev => {
       const currentMembers = prev[selectedChannel] || [];
@@ -987,7 +1027,7 @@ export default function Messaging({ initialSelectedChannel, currentUser }) {
                   return <span>Offline</span>;
                 })()
               ) : (
-                <><Users size={12} /> {currentMembersCount} members (Click to view)</>
+                <><Users size={12} /> {currentChannel?.members ? currentChannel.members.length : 0} members (Click to view)</>
               )}
             </div>
           </div>
@@ -1883,36 +1923,70 @@ export default function Messaging({ initialSelectedChannel, currentUser }) {
       {/* Group Members Modal */}
       {showGroupMembersModal && currentChannel && !isDM && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: '16px', width: '400px', maxWidth: '90%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#FFF', borderRadius: '16px', width: '450px', maxWidth: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ceo-text-primary)' }}>Group Members</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ceo-text-primary)' }}>Manage Channel Members</h3>
               <button onClick={() => setShowGroupMembersModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={20} color="var(--ceo-text-muted)" /></button>
             </div>
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {(currentChannel.members || []).map(empId => {
-                const emp = employees.find(e => String(e.id) === String(empId) || e.id === empId);
-                const name = emp ? emp.name : (empId === 'ceo' ? 'CEO' : (empId === 'hr' ? 'HR Manager' : `Emp #${empId}`));
-                const avatar = emp?.photo ? `http://localhost:8000${emp.photo}` : (emp?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`);
-                return (
-                  <div key={empId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={name} style={{ width: '40px', height: '40px', borderRadius: '20px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{name}</div>
-                    </div>
-                    {empId !== 'ceo' && (
-                      <button 
-                        onClick={() => {
-                          setSelectedChannel(`dm-${empId}`);
-                          setShowGroupMembersModal(false);
-                        }}
-                        style={{ padding: '6px 12px', background: '#F1F5F9', border: '1px solid var(--ceo-border)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: 'var(--ceo-text-primary)', display: 'flex', gap: '6px', alignItems: 'center' }}
-                      >
-                        <MessageSquare size={14} /> Message
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+            
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              
+              {/* IN CHANNEL */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ceo-text-secondary)', marginBottom: '16px', letterSpacing: '0.5px' }}>IN CHANNEL ({(currentChannel.members || []).length})</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {(currentChannel.members || []).map(empId => {
+                    const emp = employees.find(e => String(e.id) === String(empId) || e.id === empId);
+                    const name = emp ? emp.name : (empId === 'ceo' ? 'CEO' : (empId === 'hr' ? 'HR Manager' : `Emp #${empId}`));
+                    const avatar = emp?.photo ? `http://localhost:8000${emp.photo}` : (emp?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`);
+                    return (
+                      <div key={`in-${empId}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={name} style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{name}</div>
+                        </div>
+                        {empId !== 'ceo' && (
+                          <button 
+                            onClick={() => handleRemoveChannelMember(empId)}
+                            style={{ padding: '6px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#EF4444', transition: 'all 0.2s' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(currentChannel.members || []).length === 0 && <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)' }}>No members yet.</div>}
+                </div>
+              </div>
+
+              {/* NOT IN CHANNEL */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ceo-text-secondary)', marginBottom: '16px', letterSpacing: '0.5px' }}>NOT IN CHANNEL</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {employees.filter(e => !(currentChannel.members || []).includes(String(e.id)) && !(currentChannel.members || []).includes(e.id)).map(emp => {
+                    const avatar = emp.photo ? `http://localhost:8000${emp.photo}` : (emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}`);
+                    return (
+                      <div key={`out-${emp.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={avatar} alt={emp.name} style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--ceo-border)' }}  />
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>{emp.name}</div>
+                        </div>
+                        <button 
+                          onClick={() => handleAddChannelMember(emp.id)}
+                          style={{ padding: '6px 16px', background: 'var(--ceo-primary)', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#FFF', transition: 'all 0.2s' }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {employees.filter(e => !(currentChannel.members || []).includes(String(e.id)) && !(currentChannel.members || []).includes(e.id)).length === 0 && (
+                    <div style={{ fontSize: '13px', color: 'var(--ceo-text-muted)' }}>All employees are in this channel.</div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>

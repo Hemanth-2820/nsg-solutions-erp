@@ -63,15 +63,7 @@ export default function Sidebar({ activeRole, activeTab, setActiveTab, currentUs
 
       {/* Footer Settings & Actions */}
       <div className="sidebar-footer">
-        {(activeRole === 'CEO' || activeRole === 'HR') && (
-          <button 
-            className={`nav-link footer-link ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Settings size={18} />
-            <span>System Settings</span>
-          </button>
-        )}
+
         <button className="nav-link footer-link logout" onClick={onLogout}>
           <LogOut size={18} />
           <span>Logout</span>
