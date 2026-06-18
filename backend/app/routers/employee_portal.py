@@ -848,9 +848,8 @@ def submit_resignation(req: ResignationCreate, current_user: models.User = Depen
 def withdraw_resignation(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     res = db.query(models.Resignation).filter(
         models.Resignation.user_id == current_user.id,
-        models.Resignation.status == "pending",
         models.Resignation.deleted_at == None
-    ).first()
+    ).order_by(models.Resignation.id.desc()).first()
     if not res:
         raise HTTPException(status_code=404, detail="No active resignation request found.")
         
