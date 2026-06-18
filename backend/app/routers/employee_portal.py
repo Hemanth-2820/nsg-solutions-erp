@@ -227,8 +227,8 @@ def submit_pr(id: int, req: PRSubmitRequest, current_user: models.User = Depends
     )
 
 @router.get("/tasks/schema")
-def get_task_schema(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
-    user_dept = current_user.department if current_user.department else "IT"
+def get_task_schema(department: Optional[str] = None, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+    user_dept = department if department else (current_user.department if current_user.department else "IT")
     
     schema_record = db.query(models.DepartmentSchema).filter(models.DepartmentSchema.department == user_dept).first()
     

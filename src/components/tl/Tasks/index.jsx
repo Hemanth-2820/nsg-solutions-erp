@@ -18,8 +18,6 @@ export default function Tasks({ currentUser }) {
   const { data: tasks = [], mutate: mutateTasks } = useSWR('/api/team-lead/tasks', fetcher);
   const { data: projectsData = [], mutate: mutateProjects } = useSWR('/api/team-lead/projects', fetcher);
   const { data: backendSprints } = useSWR('/api/team-lead/sprints', fetcher);
-  const { data: schemaData } = useSWR('/api/team-lead/tasks/schema', fetcher);
-  const schema = schemaData?.schema || [];
 
   const savedSprints = (() => {
     if (backendSprints && backendSprints.length > 0) {
@@ -51,6 +49,11 @@ export default function Tasks({ currentUser }) {
   const [statusNotes, setStatusNotes] = useState({});
   const [statusAttachments, setStatusAttachments] = useState({});
   const [customFields, setCustomFields] = useState({});
+
+  const selectedProj = projectsData.find(p => p.id === taskProjectId);
+  const targetDept = selectedProj?.department || currentUser?.department || 'IT';
+  const { data: schemaData } = useSWR(`/api/team-lead/tasks/schema?department=${targetDept}`, fetcher);
+  const schema = schemaData?.schema || [];
 
   // Do not auto-select first project — let user choose
 

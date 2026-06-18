@@ -102,6 +102,7 @@ class ProjectCreate(BaseModel):
     status: Optional[str] = "Active"
     deadline: str
     checklist: Optional[str] = None
+    department: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -111,6 +112,7 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     deadline: Optional[str] = None
     checklist: Optional[str] = None
+    department: Optional[str] = None
 
 class VendorCreate(BaseModel):
     vendor_id: str
@@ -167,6 +169,7 @@ class ProjectResponse(BaseModel):
     deadline: Optional[str]
     checklist: Optional[str] = None
     milestones: Optional[List[ProjectMilestoneResponse]] = []
+    department: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -546,7 +549,8 @@ def create_project(req: ProjectCreate, current_user: models.User = Depends(secur
         used=req.used,
         status=req.status,
         deadline=req.deadline,
-        checklist=req.checklist
+        checklist=req.checklist,
+        department=req.department
     )
     db.add(proj)
     db.commit()
@@ -568,6 +572,7 @@ def update_project(project_id: int, req: ProjectUpdate, current_user: models.Use
     if req.status is not None: proj.status = req.status
     if req.deadline is not None: proj.deadline = req.deadline
     if req.checklist is not None: proj.checklist = req.checklist
+    if req.department is not None: proj.department = req.department
         
     db.commit()
     db.refresh(proj)
@@ -1176,6 +1181,7 @@ class ProjectResponseCEO(BaseModel):
     used: float
     status: str
     deadline: Optional[str] = None
+    department: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -1188,6 +1194,7 @@ class ProjectUpdateCEORequest(BaseModel):
     used: Optional[float] = None
     status: Optional[str] = None
     deadline: Optional[str] = None
+    department: Optional[str] = None
 
 
 router_get_projects = None  # placeholder
@@ -1221,6 +1228,8 @@ def ceo_update_project(id: int, req: ProjectUpdateCEORequest, current_user: mode
         project.status = req.status
     if req.deadline is not None:
         project.deadline = req.deadline
+    if req.department is not None:
+        project.department = req.department
     db.commit()
     db.refresh(project)
     return project

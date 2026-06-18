@@ -9,7 +9,9 @@ export default function Projects({ currentUser }) {
   const token = localStorage.getItem('nsg_jwt_token');
   const fetcher = (url) => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json());
 
-  const { data: projects = [], mutate: mutateProjects } = useSWR('/api/ceo-portal/projects', fetcher);
+  const { data: rawProjects, mutate: mutateProjects } = useSWR('/api/ceo-portal/projects', fetcher);
+  const projects = Array.isArray(rawProjects) ? rawProjects : (rawProjects?.projects ?? rawProjects?.data ?? []);
+  const { data: departments = [] } = useSWR('/api/ceo-portal/departments', fetcher);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -24,7 +26,7 @@ export default function Projects({ currentUser }) {
   const [saving, setSaving] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProject, setNewProject] = useState({ name: '', client: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
+  const [newProject, setNewProject] = useState({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
   const [creating, setCreating] = useState(false);
 
   
@@ -86,6 +88,7 @@ export default function Projects({ currentUser }) {
         body: JSON.stringify({
           name: editProject.name,
           client: editProject.client,
+          department: editProject.department,
           budget: Number(editProject.budget),
           used: Number(editProject.used),
           status: editProject.status,
@@ -114,6 +117,7 @@ export default function Projects({ currentUser }) {
         body: JSON.stringify({
           name: newProject.name,
           client: newProject.client,
+          department: newProject.department,
           budget: Number(newProject.budget),
           used: Number(newProject.used) || 0,
           status: newProject.status,
@@ -125,7 +129,7 @@ export default function Projects({ currentUser }) {
       const created = await res.json();
       mutateProjects();
       setShowCreateModal(false);
-      setNewProject({ name: '', client: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
+      setNewProject({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
     } catch (err) {
       alert('Failed to create project: ' + err.message);
     } finally {
@@ -234,7 +238,9 @@ export default function Projects({ currentUser }) {
               </div>
               
               <div className="ceo-typography-section-title" style={{ fontSize: '18px' }}>{proj.name}</div>
-              <div className="ceo-typography-meta" style={{ fontStyle: 'italic', marginBottom: '24px', marginTop: '4px' }}>Client: {proj.client}</div>
+              <div className="ceo-typography-meta" style={{ fontStyle: 'italic', marginTop: '4px' }}>Client: {proj.client}</div>
+              {proj.department && <div className="ceo-typography-meta" style={{ marginBottom: '24px', color: 'var(--ceo-primary)' }}>Dept: {proj.department}</div>}
+              {!proj.department && <div style={{ marginBottom: '24px' }}></div>}
               
               {/* Budget Bar */}
               <div style={{ marginBottom: '24px' }}>
@@ -370,6 +376,13 @@ export default function Projects({ currentUser }) {
                   <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.client} onChange={e => setEditProject({...editProject, client: e.target.value})} />
                 </div>
                 <div style={{ flex: 1 }}>
+                  <label className="ceo-typography-meta">Department</label>
+                  <select className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.department || ''} onChange={e => setEditProject({...editProject, department: e.target.value})}>
+                    <option value="">None / Global</option>
+                    {departments.map(d => <option key={d.id} value={d.name || d.department}>{d.name || d.department}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Status</label>
                   <select className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.status} onChange={e => setEditProject({...editProject, status: e.target.value})}>
                     <option value="Active">Active</option>
@@ -426,6 +439,13 @@ export default function Projects({ currentUser }) {
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Client</label>
                   <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.client} onChange={e => setNewProject({...newProject, client: e.target.value})} placeholder="Enter client name" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ceo-typography-meta">Department</label>
+                  <select className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.department} onChange={e => setNewProject({...newProject, department: e.target.value})}>
+                    <option value="">None / Global</option>
+                    {departments.map(d => <option key={d.id} value={d.name || d.department}>{d.name || d.department}</option>)}
+                  </select>
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Status</label>
