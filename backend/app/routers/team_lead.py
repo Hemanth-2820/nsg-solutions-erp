@@ -514,9 +514,9 @@ def reassign_task(id: int, req: ReassignRequest, current_user: models.User = Dep
     return task
 
 @router.get("/tasks/schema")
-def get_task_schema(db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
+def get_task_schema(department: Optional[str] = None, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
     verify_manager_role(current_user)
-    user_dept = current_user.department if current_user.department else "IT"
+    user_dept = department if department else (current_user.department if current_user.department else "IT")
     
     schema_record = db.query(models.DepartmentSchema).filter(models.DepartmentSchema.department == user_dept).first()
     
@@ -868,6 +868,7 @@ class ProjectResponse(BaseModel):
     status: str
     deadline: Optional[str] = None
     checklist: Optional[str] = None
+    department: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -881,6 +882,7 @@ class ProjectCreateRequest(BaseModel):
     status: str = "Active"
     deadline: Optional[str] = None
     checklist: Optional[str] = None
+    department: Optional[str] = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -891,12 +893,16 @@ class ProjectUpdateRequest(BaseModel):
     status: Optional[str] = None
     deadline: Optional[str] = None
     checklist: Optional[str] = None
+    department: Optional[str] = None
 
 
 @router.get("/projects", response_model=List[ProjectResponse])
 def get_projects(skip: int = 0, limit: int = 100, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_manager_role(current_user)
-    return db.query(models.Project).order_by(models.Project.id.desc()).offset(skip).limit(limit).all()
+    query = db.query(models.Project)
+    if current_user.role == "tl" and current_user.department:
+        query = query.filter(models.Project.department == current_user.department)
+    return query.order_by(models.Project.id.desc()).offset(skip).limit(limit).all()
 
 
 @router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -909,7 +915,8 @@ def create_project(req: ProjectCreateRequest, current_user: models.User = Depend
         used=req.used,
         status=req.status,
         deadline=req.deadline,
-        checklist=req.checklist
+        checklist=req.checklist,
+        department=req.department
     )
     db.add(project)
     db.commit()
@@ -937,6 +944,8 @@ def update_project(id: int, req: ProjectUpdateRequest, current_user: models.User
         project.deadline = req.deadline
     if req.checklist is not None:
         project.checklist = req.checklist
+    if req.department is not None:
+        project.department = req.department
     db.commit()
     db.refresh(project)
     return project
