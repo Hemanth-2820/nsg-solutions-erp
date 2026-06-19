@@ -34,8 +34,9 @@ const Approvals = () => {
     dates: `${r.from_date} – ${r.to_date}`,
     reason: r.reason,
     status: r.status,
+    timestamp: r.created_at || '1970-01-01T00:00:00Z',
     overlapWarning: null
-  })) : [];
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) : [];
 
   const { data: rawWfhs = [], mutate: mutateWfhs } = useSWR('/api/team-lead/wfh/pending', fetcher);
   const wfhs = Array.isArray(rawWfhs) ? rawWfhs.map(r => ({
@@ -44,8 +45,9 @@ const Approvals = () => {
     date: `${r.from_date} – ${r.to_date}`,
     reason: r.reason,
     status: r.status,
-    locationVerified: true
-  })) : [];
+    locationVerified: true,
+    timestamp: r.created_at || '1970-01-01T00:00:00Z'
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) : [];
 
   const { data: rawExpenses = [], mutate: mutateExpenses } = useSWR('/api/team-lead/expenses/pending', fetcher);
   const expenses = Array.isArray(rawExpenses) ? rawExpenses.map(c => {
@@ -59,9 +61,10 @@ const Approvals = () => {
       date: c.claim_date || c.date || '',
       description: c.description || '',
       receiptName: c.receipt_url || c.receiptName || 'receipt.pdf',
-      status: c.tl_approval || 'pending'
+      status: c.tl_approval || 'pending',
+      timestamp: c.created_at || '1970-01-01T00:00:00Z'
     };
-  }) : [];
+  }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) : [];
 
   const [selectedId, setSelectedId] = useState(null);
 
@@ -256,8 +259,12 @@ const Approvals = () => {
                 className={`${styles.listItem} ${selectedId === item.id ? styles.listItemSelected : ''}`}
                 onClick={() => setSelectedId(item.id)}
               >
-                <div className={styles.itemHeader}>
+                <div className={styles.itemHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className={styles.employeeName}>{item.employee}</span>
+                  <span style={{fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                    <Clock size={12} />
+                    {item.timestamp !== '1970-01-01T00:00:00Z' ? new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                  </span>
                 </div>
                 
                 <div className={styles.itemDesc}>
