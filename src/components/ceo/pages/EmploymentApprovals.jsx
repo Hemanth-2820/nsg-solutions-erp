@@ -63,8 +63,9 @@ const EmploymentApprovals = () => {
     dates: `${l.from_date} – ${l.to_date}`,
     reason: l.reason,
     status: l.status,
+    timestamp: l.created_at || '1970-01-01T00:00:00Z',
     overlapWarning: null
-  }));
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   const allHelpRequests = Array.isArray(approvalsData.helpRequests) ? approvalsData.helpRequests : [];
   const allAssetRequests = Array.isArray(approvalsData.assetRequests) ? approvalsData.assetRequests : [];
@@ -74,8 +75,9 @@ const EmploymentApprovals = () => {
     employee: h.employee_name,
     issueType: h.issue_type,
     description: h.description,
-    date: h.created_at ? h.created_at.split('T')[0] : 'N/A'
-  }));
+    date: h.created_at ? h.created_at.split('T')[0] : 'N/A',
+    timestamp: h.created_at || '1970-01-01T00:00:00Z'
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   const wfhRequests = allLeaveRequests.filter(l => l.leave_type === 'WFH').map(l => ({
     id: l.id,
@@ -83,16 +85,18 @@ const EmploymentApprovals = () => {
     fromDate: l.from_date,
     toDate: l.to_date,
     reason: l.reason,
-    status: l.status
-  }));
+    status: l.status,
+    timestamp: l.created_at || '1970-01-01T00:00:00Z'
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   const assetRequests = allAssetRequests.map(a => ({
     id: a.id,
     employee: a.employee_name,
     assetType: a.asset_type,
     reason: a.reason,
-    cost: 'N/A'
-  }));
+    cost: 'N/A',
+    timestamp: a.created_at || '1970-01-01T00:00:00Z'
+  })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   let currentList = [];
   let selectedItem = null;
@@ -230,8 +234,12 @@ const EmploymentApprovals = () => {
                 className={`${styles.listItem} ${selectedId === item.id ? styles.listItemSelected : ''}`}
                 onClick={() => setSelectedId(item.id)}
               >
-                <div className={styles.itemHeader}>
+                <div className={styles.itemHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className={styles.employeeName}>{item.employee}</span>
+                  <span style={{fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                    <Clock size={12} />
+                    {item.timestamp !== '1970-01-01T00:00:00Z' ? new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                  </span>
                 </div>
                 
                 <div className={styles.itemDesc}>

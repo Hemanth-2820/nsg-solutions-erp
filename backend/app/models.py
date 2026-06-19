@@ -249,6 +249,7 @@ class LeaveRequest(Base):
     status = Column(String, default="pending")  # pending, tl_approved, hr_approved, denied
     tl_approved_at = Column(DateTime(timezone=True), nullable=True)
     hr_approved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     user = relationship("User", back_populates="leave_requests")
@@ -268,6 +269,7 @@ class ExpenseClaim(Base):
     hr_approval = Column(String, default="pending")
     status = Column(String, default="pending")  # pending, approved, rejected
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     user = relationship("User", back_populates="expense_claims")

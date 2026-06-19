@@ -124,6 +124,7 @@ class LeaveRequestResponse(BaseModel):
     status: str
     tl_approved_at: Optional[datetime] = None
     hr_approved_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -138,6 +139,7 @@ class ExpenseClaimResponse(BaseModel):
     tl_approval: str
     hr_approval: str
     status: str
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

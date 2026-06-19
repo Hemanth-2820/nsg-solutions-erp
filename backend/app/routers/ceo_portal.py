@@ -251,6 +251,7 @@ class LeaveRequestResponse(BaseModel):
     status: str
     tl_approved_at: Optional[datetime]
     hr_approved_at: Optional[datetime]
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -702,7 +703,8 @@ def get_pending_approvals(current_user: models.User = Depends(security.get_curre
             "receipt_url": c.receipt_url,
             "tl_approval": c.tl_approval,
             "hr_approval": c.hr_approval,
-            "status": c.status
+            "status": c.status,
+            "created_at": c.created_at.isoformat() if c.created_at else None
         })
 
     enriched_leaves = []
@@ -719,7 +721,8 @@ def get_pending_approvals(current_user: models.User = Depends(security.get_curre
             "reason": l.reason,
             "status": l.status,
             "tl_approved_at": l.tl_approved_at.isoformat() if l.tl_approved_at else None,
-            "hr_approved_at": l.hr_approved_at.isoformat() if l.hr_approved_at else None
+            "hr_approved_at": l.hr_approved_at.isoformat() if l.hr_approved_at else None,
+            "created_at": l.created_at.isoformat() if l.created_at else None
         })
 
     enriched_loans = []
