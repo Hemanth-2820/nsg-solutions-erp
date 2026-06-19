@@ -39,6 +39,7 @@ class UserProfileResponse(BaseModel):
     photo: Optional[str] = None
     status: Optional[str] = None
     manager: Optional[str] = None
+    shift_timing: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -637,7 +638,28 @@ def approve_wfh(id: int, current_user: models.User = Depends(security.get_curren
 def reject_wfh(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     return reject_leave(id, current_user, db)
 
-# 3.2 Approvals (Attendance Corrections)
+# 3.2 Alerts Dismissal
+@router.post("/attendance/{id}/dismiss-late")
+def dismiss_late_alert(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    att = db.query(models.Attendance).filter(models.Attendance.id == id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Attendance record not found.")
+    att.late_alert_dismissed = True
+    db.commit()
+    return {"status": "success", "message": "Late alert dismissed"}
+
+@router.post("/attendance/{id}/dismiss-missed-punch")
+def dismiss_missed_punch_alert(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_manager_role(current_user)
+    att = db.query(models.Attendance).filter(models.Attendance.id == id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Attendance record not found.")
+    att.missed_punch_alert_dismissed = True
+    db.commit()
+    return {"status": "success", "message": "Missed punch alert dismissed"}
+
+# 3.3 Approvals (Attendance Corrections)
 @router.get("/attendance-corrections/pending", response_model=List[AttendanceCorrectionResponse])
 def get_pending_corrections(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_manager_role(current_user)
@@ -1051,7 +1073,9 @@ def get_team_attendance(
             "status": log.status,
             "work_mode": log.work_mode if hasattr(log, 'work_mode') else "office",
             "exception_flag": log.exception_flag if hasattr(log, 'exception_flag') else None,
-            "is_late": log.is_late if hasattr(log, 'is_late') else False
+            "is_late": log.is_late if hasattr(log, 'is_late') else False,
+            "late_alert_dismissed": log.late_alert_dismissed if hasattr(log, 'late_alert_dismissed') else False,
+            "missed_punch_alert_dismissed": log.missed_punch_alert_dismissed if hasattr(log, 'missed_punch_alert_dismissed') else False
         })
     return result
 
