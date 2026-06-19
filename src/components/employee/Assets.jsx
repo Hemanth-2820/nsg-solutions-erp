@@ -147,13 +147,22 @@ export default function Assets({ currentUser }) {
         @media (min-width: 1024px) {
           .assets-layout-grid {
             grid-template-columns: 1.2fr 1fr;
+            grid-template-rows: minmax(0, 1fr) auto;
             grid-template-areas: 
               "form issued"
               "noc noc";
+            height: calc(100vh - 180px);
+          }
+          .area-form, .area-issued { 
+            height: 100%; max-height: 100%; 
+            overflow-y: auto; padding-right: 4px; 
           }
           .area-form { grid-area: form; }
           .area-issued { grid-area: issued; }
           .area-noc { grid-area: noc; }
+
+          .area-form::-webkit-scrollbar, .area-issued::-webkit-scrollbar { width: 4px; }
+          .area-form::-webkit-scrollbar-thumb, .area-issued::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         }
 
         .asset-issued-item {
