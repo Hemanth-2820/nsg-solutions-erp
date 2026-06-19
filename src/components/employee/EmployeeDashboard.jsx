@@ -1,5 +1,6 @@
 // Crash fix applied
 import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import './Employee.css';
 
 export default function EmployeeDashboard({ setActiveTab, currentUser }) {
@@ -509,23 +510,43 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
                   </button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
-                  {notifications.map(n => {
-                    const isUnread = n.unread && !notifRead[n.id];
-                    return (
+                  {(() => {
+                    const unreadNotifs = notifications.filter(n => n.unread && !notifRead[n.id]);
+                    if (unreadNotifs.length === 0) {
+                      return <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>All caught up! No new notifications.</div>;
+                    }
+                    return unreadNotifs.map(n => (
                       <div
                         key={n.id}
-                        className={`emp-notif-row ${isUnread ? 'emp-notif-row--unread' : 'emp-notif-row--read'}`}
-                        onClick={() => setNotifRead(p => ({ ...p, [n.id]: true }))}
+                        className="emp-notif-row emp-notif-row--unread"
+                        style={{ cursor: 'default' }}
                       >
-                        {isUnread && <div className="emp-notif-dot" />}
+                        <div className="emp-notif-dot" />
                         <span className="emp-notif-icon">{n.icon}</span>
                         <div style={{ flex: 1 }}>
-                          <p className={`emp-notif-msg ${!isUnread ? 'emp-notif-msg--read' : ''}`}>{n.msg}</p>
+                          <p className="emp-notif-msg">{n.msg}</p>
                           <p className="emp-notif-time">{n.time}</p>
                         </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNotifRead(p => ({ ...p, [n.id]: true }));
+                          }}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px',
+                            cursor: 'pointer', color: 'var(--text-muted)',
+                            borderRadius: '4px', display: 'flex', alignItems: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                          title="Dismiss notification"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
 
