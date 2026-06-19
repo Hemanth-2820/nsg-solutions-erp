@@ -76,6 +76,8 @@ class Attendance(Base):
     work_mode = Column(String, default="office")  # office, wfh
     is_late = Column(Boolean, default=False)
     exception_flag = Column(String, default="none")  # none, absent, missed-punch
+    late_alert_dismissed = Column(Boolean, default=False)
+    missed_punch_alert_dismissed = Column(Boolean, default=False)
 
     # Relationships
     user = relationship("User", back_populates="attendance_records")
