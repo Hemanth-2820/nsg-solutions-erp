@@ -1,6 +1,6 @@
 import html2pdf from 'html2pdf.js';
 
-export const generateOfferLetterPDF = async (data) => {
+export const getOfferLetterHTML = (data) => {
   // Common Header HTML
   const headerHTML = `
     <div style="padding: 20px 40px 10px 40px;">
@@ -392,11 +392,15 @@ export const generateOfferLetterPDF = async (data) => {
     </div>
   `);
 
-  const htmlContent = `
+  return `
     <div style="background-color: #fff; color: #000; font-family: 'Times New Roman', Times, serif; width: 210mm;">
       ${page1}${page2}${page3}${page4}${page5}
     </div>
   `;
+};
+
+export const generateOfferLetterPDF = async (data, customHTML = null) => {
+  const htmlContent = customHTML || getOfferLetterHTML(data);
 
   // Configure html2pdf options
   const opt = {
