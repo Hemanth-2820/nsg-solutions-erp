@@ -8,5 +8,5 @@ if not db_url:
 
 engine = create_engine(db_url)
 with engine.begin() as conn:
-    res = conn.execute(text("SELECT id, status, ceo_status FROM resignations")).fetchall()
+    res = conn.execute(text("SELECT id, name, role FROM users WHERE name='John Doe'")).fetchall()
     print(res)

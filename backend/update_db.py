@@ -8,5 +8,5 @@ if not db_url:
 
 engine = create_engine(db_url)
 with engine.begin() as conn:
-    res = conn.execute(text("SELECT id, status, ceo_status FROM resignations")).fetchall()
-    print(res)
+    conn.execute(text("ALTER TABLE resignations ADD COLUMN IF NOT EXISTS ceo_status VARCHAR DEFAULT 'pending'"))
+print("Column added successfully!")
