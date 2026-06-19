@@ -28,10 +28,37 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
   };
 
   const userRole = (currentUser?.role || '').toLowerCase();
-  const hideTasks = userRole === 'hr' || userRole === 'ceo';
+  const hideTasks = userRole === 'hr' || userRole === 'ceo' || userRole === 'team lead' || userRole === 'tl';
+  const hideForHR = userRole === 'hr';
+  const hideForTL = userRole === 'team lead' || userRole === 'tl';
+  const hideHolidaysExpensesPerfMsg = hideForHR || hideForTL;
+  const hideTimesheet = hideForHR;
 
   return (
-    <div className="nav-group">
+    <div 
+      className={`nav-group ${hideHolidaysExpensesPerfMsg ? 'emp-sidebar-spaced' : ''} ${hideForHR ? 'hr-specific-spacing' : ''}`}
+      style={hideForHR ? { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' } : (hideHolidaysExpensesPerfMsg ? { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' } : {})}
+    >
+      {hideHolidaysExpensesPerfMsg && (
+        <style>
+          {`
+            .emp-sidebar-spaced .nav-link {
+              padding: 12px 14px !important;
+              font-size: 14.5px !important;
+            }
+            .hr-specific-spacing .nav-link {
+              padding: 14px 14px !important;
+              font-size: 14.5px !important;
+            }
+            .emp-sidebar-spaced .nav-group-title {
+              margin-bottom: 10px !important;
+            }
+            .hr-specific-spacing .nav-group-title {
+              margin-bottom: 12px !important;
+            }
+          `}
+        </style>
+      )}
       <span className="nav-group-title">Staff Modules</span>
       
       {/* Dashboard Tab */}
@@ -55,14 +82,16 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
       </button>
 
       {/* Timesheet Tab */}
-      <button
-        className={`nav-link ${isTimesheetActive ? 'active' : ''}`}
-        onClick={() => setActiveTab('timesheet')}
-        style={isTimesheetActive ? activeStyle : {}}
-      >
-        <Clock size={18} />
-        <span>Timesheet</span>
-      </button>
+      {!hideTimesheet && (
+        <button
+          className={`nav-link ${isTimesheetActive ? 'active' : ''}`}
+          onClick={() => setActiveTab('timesheet')}
+          style={isTimesheetActive ? activeStyle : {}}
+        >
+          <Clock size={18} />
+          <span>Timesheet</span>
+        </button>
+      )}
 
       {/* Tasks Tab */}
       {!hideTasks && (
@@ -87,14 +116,16 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
       </button>
 
       {/* Holidays Tab */}
-      <button
-        className={`nav-link ${isHolidaysActive ? 'active' : ''}`}
-        onClick={() => setActiveTab('holidays')}
-        style={isHolidaysActive ? activeStyle : {}}
-      >
-        <Calendar size={18} />
-        <span>Holidays</span>
-      </button>
+      {!hideHolidaysExpensesPerfMsg && (
+        <button
+          className={`nav-link ${isHolidaysActive ? 'active' : ''}`}
+          onClick={() => setActiveTab('holidays')}
+          style={isHolidaysActive ? activeStyle : {}}
+        >
+          <Calendar size={18} />
+          <span>Holidays</span>
+        </button>
+      )}
 
       {/* Payroll Tab */}
       <button
@@ -107,24 +138,28 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
       </button>
 
       {/* Expenses Tab */}
-      <button
-        className={`nav-link ${isExpensesActive ? 'active' : ''}`}
-        onClick={() => setActiveTab('expenses')}
-        style={isExpensesActive ? activeStyle : {}}
-      >
-        <CreditCard size={18} />
-        <span>Claim Expenses</span>
-      </button>
+      {!hideHolidaysExpensesPerfMsg && (
+        <button
+          className={`nav-link ${isExpensesActive ? 'active' : ''}`}
+          onClick={() => setActiveTab('expenses')}
+          style={isExpensesActive ? activeStyle : {}}
+        >
+          <CreditCard size={18} />
+          <span>Claim Expenses</span>
+        </button>
+      )}
 
       {/* Performance Tab */}
-      <button
-        className={`nav-link ${isPerformanceActive ? 'active' : ''}`}
-        onClick={() => setActiveTab('performance')}
-        style={isPerformanceActive ? activeStyle : {}}
-      >
-        <Target size={18} />
-        <span>Performance</span>
-      </button>
+      {!hideHolidaysExpensesPerfMsg && (
+        <button
+          className={`nav-link ${isPerformanceActive ? 'active' : ''}`}
+          onClick={() => setActiveTab('performance')}
+          style={isPerformanceActive ? activeStyle : {}}
+        >
+          <Target size={18} />
+          <span>Performance</span>
+        </button>
+      )}
 
       {/* Profile Tab */}
       <button
@@ -167,14 +202,16 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
       </button>
 
       {/* Messaging Tab */}
-      <button
-        className={`nav-link ${isMessagingActive ? 'active' : ''}`}
-        onClick={() => setActiveTab('messaging')}
-        style={isMessagingActive ? activeStyle : {}}
-      >
-        <MessageSquare size={18} />
-        <span>Messaging</span>
-      </button>
+      {!hideHolidaysExpensesPerfMsg && (
+        <button
+          className={`nav-link ${isMessagingActive ? 'active' : ''}`}
+          onClick={() => setActiveTab('messaging')}
+          style={isMessagingActive ? activeStyle : {}}
+        >
+          <MessageSquare size={18} />
+          <span>Messaging</span>
+        </button>
+      )}
     </div>
   );
 }

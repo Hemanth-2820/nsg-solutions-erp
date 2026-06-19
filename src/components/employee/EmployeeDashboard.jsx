@@ -66,16 +66,20 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
   const handleClockIn = async () => {
     setClockBusy(true);
     let mode = "office";
-    let lat = 12.9716;
-    let lng = 77.5946;
+    let lat = null;
+    let lng = null;
 
     if (navigator.geolocation) {
       try {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 }));
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }));
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
-        if (Math.abs(lat - 12.9716) > 0.05 || Math.abs(lng - 77.5946) > 0.05) mode = "wfh";
-      } catch (e) { mode = "wfh"; }
+      } catch (e) { 
+        console.warn("Geolocation failed or timed out:", e);
+        mode = "wfh"; 
+      }
+    } else {
+      mode = "wfh";
     }
     
     try {
@@ -129,7 +133,11 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
 
   // ── Dashboard Data Fetch ──────────────────────────────────────────
   const userRole = (currentUser?.role || '').toLowerCase();
-  const hideTasks = userRole === 'hr' || userRole === 'ceo';
+  const hideTasks = userRole === 'hr' || userRole === 'ceo' || userRole === 'team lead' || userRole === 'tl';
+  const hideForHR = userRole === 'hr';
+  const hideForTL = userRole === 'team lead' || userRole === 'tl';
+  const hideHolidaysExpensesPerfMsg = hideForHR || hideForTL;
+  const hideTimesheet = hideForHR;
 
   const [dbData, setDbData] = useState({
     tasks: [],
@@ -287,27 +295,47 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
               </button>
             </div>
             <button className="emp-quick-btn" onClick={() => setActiveTab('leave')}>🌴 Request Leave</button>
-            <button className="emp-quick-btn" onClick={() => setActiveTab('messaging')}>💬 Messages
-              {myChannels.length > 0 && (
-                <span style={{ background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '9px', fontWeight: '700' }}>
-                  {myChannels.length}
-                </span>
-              )}
-            </button>
+            {!hideHolidaysExpensesPerfMsg ? (
+              <button className="emp-quick-btn" onClick={() => setActiveTab('messaging')}>💬 Messages
+                {myChannels.length > 0 && (
+                  <span style={{ background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '9px', fontWeight: '700' }}>
+                    {myChannels.length}
+                  </span>
+                )}
+              </button>
+            ) : (
+              !hideTimesheet && (
+                <button className="emp-quick-btn" onClick={() => setActiveTab('timesheet')}>⏱️ Timesheets</button>
+              )
+            )}
           </div>
         </div>
 
         {/* ── KPI row ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
           {[
-            {
+            !hideTasks ? {
               label: 'Open Tasks',
               value: openTasks.length,
               sub: `${doneTasks.length} completed`,
               color: '#60a5fa',
               icon: '📋',
               onClick: () => setActiveTab('tasks')
-            },
+            } : (!hideTimesheet ? {
+              label: 'Timesheets',
+              value: 'Logs',
+              sub: 'Track your hours',
+              color: '#60a5fa',
+              icon: '⏱️',
+              onClick: () => setActiveTab('timesheet')
+            } : {
+              label: 'Attendance',
+              value: 'Records',
+              sub: 'View daily logs',
+              color: '#60a5fa',
+              icon: '📅',
+              onClick: () => setActiveTab('attendance')
+            }),
             {
               label: 'Leave Balance',
               value: myLeave ? `${totalLeft} days` : '0 days',
@@ -324,13 +352,20 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
               icon: '💰',
               onClick: () => setActiveTab('payroll')
             },
-            {
+            !hideHolidaysExpensesPerfMsg ? {
               label: 'My Channels',
               value: myChannels.length,
               sub: 'Active workspaces',
               color: '#a78bfa',
               icon: '💬',
               onClick: () => setActiveTab('messaging')
+            } : {
+              label: 'Asset Requests',
+              value: myAssets.length,
+              sub: 'Assigned assets',
+              color: '#a78bfa',
+              icon: '💻',
+              onClick: () => setActiveTab('assets')
             }
           ].map(kpi => (
             <div
@@ -355,226 +390,228 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
         <div className="emp-grid">
 
           {/* ── Tasks ── */}
-          {!hideTasks && (
-            <div className="emp-card emp-grid__tasks">
+            {!hideTasks && (
+              <div className="emp-card emp-grid__tasks">
+                <div className="emp-section-header" style={{ marginBottom: 14 }}>
+                  <div className="emp-section-header__left">
+                    <span style={{ fontSize: 16 }}>📋</span>
+                    <span className="emp-section-header__title">My Active Tasks</span>
+                    <span className="emp-badge-count" style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa' }}>{openTasks.length}</span>
+                  </div>
+                  <button
+                    style={{ fontSize: 12, background: 'none', border: '1px solid var(--border-color)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                    onClick={() => setActiveTab('tasks')}
+                  >
+                    View All →
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {openTasks.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+                      🎉 No open tasks — great job!
+                    </div>
+                  )}
+                  {openTasks.slice(0, 5).map(task => (
+                    <div key={task.id} className="emp-task-row">
+                      <span className={`emp-priority ${priorityClass(task.priority)}`}>{task.priority}</span>
+                      <div style={{ flex: 1 }}>
+                        <div className="emp-task-title">{task.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {task.project} · Sprint: {task.sprint} · Due: {task.due}
+                        </div>
+                      </div>
+                      <span className="emp-status-chip" style={statusStyle(task.status)}>{task.status.replace('-', ' ')}</span>
+                    </div>
+                  ))}
+                  {doneTasks.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 700 }}>✅ Completed</div>
+                      {doneTasks.slice(0,2).map(task => (
+                        <div key={task.id} className="emp-task-row" style={{ opacity: 0.5 }}>
+                          <span className={`emp-priority ${priorityClass(task.priority)}`}>{task.priority}</span>
+                          <div className="emp-task-title emp-task-title--done">{task.title}</div>
+                          <span className="emp-status-chip" style={statusStyle(task.status)}>done</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── CEO Announcements ── */}
+            <div className="emp-card" style={{ marginTop: hideTasks ? 0 : 16, gridColumn: hideHolidaysExpensesPerfMsg ? '1 / -1' : 'unset' }}>
               <div className="emp-section-header" style={{ marginBottom: 14 }}>
                 <div className="emp-section-header__left">
-                  <span style={{ fontSize: 16 }}>📋</span>
-                  <span className="emp-section-header__title">My Active Tasks</span>
-                  <span className="emp-badge-count" style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa' }}>{openTasks.length}</span>
+                  <span style={{ fontSize: 16 }}>📢</span>
+                  <span className="emp-section-header__title">CEO Announcements</span>
+                  <span className="emp-badge-count" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>
+                    {dbData.announcements.length}
+                  </span>
                 </div>
-                <button
-                  style={{ fontSize: 12, background: 'none', border: '1px solid var(--border-color)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                  onClick={() => setActiveTab('tasks')}
-                >
-                  View All →
-                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {dbData.announcements.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+                    No announcements yet.
+                  </div>
+                ) : (
+                  dbData.announcements.slice(0, 3).map(ann => (
+                    <div key={ann.id} style={{
+                      padding: '14px',
+                      background: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
+                      borderLeft: ann.priority === 'Urgent' ? '4px solid #f87171' : '4px solid #60a5fa',
+                      borderRadius: 8,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{ann.date}</span>
+                        {ann.priority === 'Urgent' && (
+                          <span style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800 }}>URGENT</span>
+                        )}
+                      </div>
+                      <strong style={{ fontSize: 13, color: '#fff' }}>{ann.title}</strong>
+                      <div dangerouslySetInnerHTML={{ __html: ann.body }} className="quill-content" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }} />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* ── Right column ── */}
+            {!hideHolidaysExpensesPerfMsg && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* ── Pending Actions ── */}
+              <div className="emp-card">
+                <div className="emp-section-header" style={{ marginBottom: 14 }}>
+                  <div className="emp-section-header__left">
+                    <span style={{ fontSize: 16 }}>⚡</span>
+                    <span className="emp-section-header__title">Pending Actions</span>
+                    <span className="emp-badge-count" style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }}>
+                      {pendingActions.filter(a => !doneActions[a.id]).length}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
+                  {pendingActions.map(action => {
+                    const done = !!doneActions[action.id];
+                    return (
+                      <div
+                        key={action.id}
+                        className={`emp-action-row ${done ? 'emp-action-row--done' : 'emp-action-row--active'}`}
+                        style={{ borderColor: done ? 'rgba(16,185,129,0.25)' : 'var(--border-color)' }}
+                        onClick={() => {
+                          if (!done) setDoneActions(p => ({ ...p, [action.id]: true }));
+                          if (action.tab && setActiveTab) setActiveTab(action.tab);
+                        }}
+                      >
+                        <div className={`emp-action-checkbox ${done ? 'emp-action-checkbox--checked' : ''}`}
+                          style={{ borderColor: done ? '#10b981' : 'var(--text-muted)' }}
+                        >
+                          {done && '✓'}
+                        </div>
+                        <div>
+                          <p className={`emp-action-label ${done ? 'emp-action-label--done' : ''}`}>{action.label}</p>
+                          <p className="emp-action-sub">{action.sub}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {openTasks.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-                    🎉 No open tasks — great job!
+              {/* ── Notifications ── */}
+              <div className="emp-card">
+                <div className="emp-section-header" style={{ marginBottom: 14 }}>
+                  <div className="emp-section-header__left">
+                    <span style={{ fontSize: 16 }}>🔔</span>
+                    <span className="emp-section-header__title">Notifications</span>
+                    <span className="emp-badge-count" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
+                      {notifications.filter(n => n.unread && !notifRead[n.id]).length}
+                    </span>
                   </div>
-                )}
-                {openTasks.slice(0, 5).map(task => (
-                  <div key={task.id} className="emp-task-row">
-                    <span className={`emp-priority ${priorityClass(task.priority)}`}>{task.priority}</span>
-                    <div style={{ flex: 1 }}>
-                      <div className="emp-task-title">{task.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {task.project} · Sprint: {task.sprint} · Due: {task.due}
+                  <button
+                    style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => {
+                      const allRead = {};
+                      notifications.forEach(n => { allRead[n.id] = true; });
+                      setNotifRead(allRead);
+                    }}
+                  >
+                    Mark all read
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
+                  {notifications.map(n => {
+                    const isUnread = n.unread && !notifRead[n.id];
+                    return (
+                      <div
+                        key={n.id}
+                        className={`emp-notif-row ${isUnread ? 'emp-notif-row--unread' : 'emp-notif-row--read'}`}
+                        onClick={() => setNotifRead(p => ({ ...p, [n.id]: true }))}
+                      >
+                        {isUnread && <div className="emp-notif-dot" />}
+                        <span className="emp-notif-icon">{n.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <p className={`emp-notif-msg ${!isUnread ? 'emp-notif-msg--read' : ''}`}>{n.msg}</p>
+                          <p className="emp-notif-time">{n.time}</p>
+                        </div>
                       </div>
-                    </div>
-                    <span className="emp-status-chip" style={statusStyle(task.status)}>{task.status.replace('-', ' ')}</span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Quick links ── */}
+              <div className="emp-card">
+                <div className="emp-section-header" style={{ marginBottom: 14 }}>
+                  <div className="emp-section-header__left">
+                    <span style={{ fontSize: 16 }}>🚀</span>
+                    <span className="emp-section-header__title">Quick Access</span>
                   </div>
-                ))}
-                {doneTasks.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 700 }}>✅ Completed</div>
-                    {doneTasks.slice(0,2).map(task => (
-                      <div key={task.id} className="emp-task-row" style={{ opacity: 0.5 }}>
-                        <span className={`emp-priority ${priorityClass(task.priority)}`}>{task.priority}</span>
-                        <div className="emp-task-title emp-task-title--done">{task.title}</div>
-                        <span className="emp-status-chip" style={statusStyle(task.status)}>done</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    { label: 'My Timesheet', icon: '⏱️', tab: 'timesheet' },
+                    { label: 'Payslips', icon: '💰', tab: 'payroll' },
+                    { label: 'Leave Request', icon: '🌴', tab: 'leave' },
+                    { label: 'My Assets', icon: '💻', tab: 'assets' },
+                    { label: 'Profile', icon: '👤', tab: 'profile' },
+                    { label: 'Messaging', icon: '💬', tab: 'messaging' },
+                  ].map(item => (
+                    <button
+                      key={item.tab}
+                      onClick={() => setActiveTab(item.tab)}
+                      style={{
+                        padding: '10px 14px',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 10,
+                        color: 'var(--text-primary)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.15s',
+                        textAlign: 'left'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.borderColor = 'var(--text-muted)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+                    >
+                      <span style={{ fontSize: 16 }}>{item.icon}</span> {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-
-          {/* ── CEO Announcements ── */}
-          <div className="emp-card" style={{ marginTop: 16 }}>
-            <div className="emp-section-header" style={{ marginBottom: 14 }}>
-              <div className="emp-section-header__left">
-                <span style={{ fontSize: 16 }}>📢</span>
-                <span className="emp-section-header__title">CEO Announcements</span>
-                <span className="emp-badge-count" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>
-                  {dbData.announcements.length}
-                </span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {dbData.announcements.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-                  No announcements yet.
-                </div>
-              ) : (
-                dbData.announcements.slice(0, 3).map(ann => (
-                  <div key={ann.id} style={{
-                    padding: '14px',
-                    background: 'var(--bg-primary)',
-                    border: '1px solid var(--border-color)',
-                    borderLeft: ann.priority === 'Urgent' ? '4px solid #f87171' : '4px solid #60a5fa',
-                    borderRadius: 8,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{ann.date}</span>
-                      {ann.priority === 'Urgent' && (
-                        <span style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800 }}>URGENT</span>
-                      )}
-                    </div>
-                    <strong style={{ fontSize: 13, color: '#fff' }}>{ann.title}</strong>
-                    <div dangerouslySetInnerHTML={{ __html: ann.body }} className="quill-content" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }} />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* ── Right column ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* ── Pending Actions ── */}
-            <div className="emp-card">
-              <div className="emp-section-header" style={{ marginBottom: 14 }}>
-                <div className="emp-section-header__left">
-                  <span style={{ fontSize: 16 }}>⚡</span>
-                  <span className="emp-section-header__title">Pending Actions</span>
-                  <span className="emp-badge-count" style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }}>
-                    {pendingActions.filter(a => !doneActions[a.id]).length}
-                  </span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
-                {pendingActions.map(action => {
-                  const done = !!doneActions[action.id];
-                  return (
-                    <div
-                      key={action.id}
-                      className={`emp-action-row ${done ? 'emp-action-row--done' : 'emp-action-row--active'}`}
-                      style={{ borderColor: done ? 'rgba(16,185,129,0.25)' : 'var(--border-color)' }}
-                      onClick={() => {
-                        if (!done) setDoneActions(p => ({ ...p, [action.id]: true }));
-                        if (action.tab && setActiveTab) setActiveTab(action.tab);
-                      }}
-                    >
-                      <div className={`emp-action-checkbox ${done ? 'emp-action-checkbox--checked' : ''}`}
-                        style={{ borderColor: done ? '#10b981' : 'var(--text-muted)' }}
-                      >
-                        {done && '✓'}
-                      </div>
-                      <div>
-                        <p className={`emp-action-label ${done ? 'emp-action-label--done' : ''}`}>{action.label}</p>
-                        <p className="emp-action-sub">{action.sub}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Notifications ── */}
-            <div className="emp-card">
-              <div className="emp-section-header" style={{ marginBottom: 14 }}>
-                <div className="emp-section-header__left">
-                  <span style={{ fontSize: 16 }}>🔔</span>
-                  <span className="emp-section-header__title">Notifications</span>
-                  <span className="emp-badge-count" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
-                    {notifications.filter(n => n.unread && !notifRead[n.id]).length}
-                  </span>
-                </div>
-                <button
-                  style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                  onClick={() => {
-                    const allRead = {};
-                    notifications.forEach(n => { allRead[n.id] = true; });
-                    setNotifRead(allRead);
-                  }}
-                >
-                  Mark all read
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
-                {notifications.map(n => {
-                  const isUnread = n.unread && !notifRead[n.id];
-                  return (
-                    <div
-                      key={n.id}
-                      className={`emp-notif-row ${isUnread ? 'emp-notif-row--unread' : 'emp-notif-row--read'}`}
-                      onClick={() => setNotifRead(p => ({ ...p, [n.id]: true }))}
-                    >
-                      {isUnread && <div className="emp-notif-dot" />}
-                      <span className="emp-notif-icon">{n.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <p className={`emp-notif-msg ${!isUnread ? 'emp-notif-msg--read' : ''}`}>{n.msg}</p>
-                        <p className="emp-notif-time">{n.time}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Quick links ── */}
-            <div className="emp-card">
-              <div className="emp-section-header" style={{ marginBottom: 14 }}>
-                <div className="emp-section-header__left">
-                  <span style={{ fontSize: 16 }}>🚀</span>
-                  <span className="emp-section-header__title">Quick Access</span>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[
-                  { label: 'My Timesheet', icon: '⏱️', tab: 'timesheet' },
-                  { label: 'Payslips', icon: '💰', tab: 'payroll' },
-                  { label: 'Leave Request', icon: '🌴', tab: 'leave' },
-                  { label: 'My Assets', icon: '💻', tab: 'assets' },
-                  { label: 'Profile', icon: '👤', tab: 'profile' },
-                  { label: 'Messaging', icon: '💬', tab: 'messaging' },
-                ].map(item => (
-                  <button
-                    key={item.tab}
-                    onClick={() => setActiveTab(item.tab)}
-                    style={{
-                      padding: '10px 14px',
-                      background: 'var(--bg-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 10,
-                      color: 'var(--text-primary)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      transition: 'all 0.15s',
-                      textAlign: 'left'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.borderColor = 'var(--text-muted)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
-                  >
-                    <span style={{ fontSize: 16 }}>{item.icon}</span> {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
