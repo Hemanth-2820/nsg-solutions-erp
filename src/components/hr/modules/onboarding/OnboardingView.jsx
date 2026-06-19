@@ -269,6 +269,20 @@ export function OnboardingView({ queryParams, setQueryParams }) {
   };
 
   const activeProbationers = (db?.employees || []).filter(e => e.status === 'probation');
+  
+  // Pagination State for "New Hires" tab
+  const [currentPage, setCurrentPage] = useState(1);
+  const cardsPerPage = 6;
+  const indexOfLastCard = currentPage * cardsPerPage;
+  const indexOfFirstCard = indexOfLastCard - cardsPerPage;
+  const currentCards = activeProbationers.slice(indexOfFirstCard, indexOfLastCard);
+  const totalPages = Math.ceil(activeProbationers.length / cardsPerPage);
+
+  // Reset page when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [onboardingTab]);
+
   const onboardingTasks = db.onboardingTasks || [];
   const esignRequests = db.esignRequests || [];
 
@@ -467,9 +481,10 @@ export function OnboardingView({ queryParams, setQueryParams }) {
       </div>
 
       {onboardingTab === 'active' && (
-        <div className="metrics-grid">
-          {activeProbationers.map(emp => {
-            const empTasks = onboardingTasks.filter(t => t.instance_id === emp.id);
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="metrics-grid">
+            {currentCards.map(emp => {
+              const empTasks = onboardingTasks.filter(t => t.instance_id === emp.id);
             const totalTasks = empTasks.length || 5;
             const completedTasks = empTasks.filter(t => t.status === 'completed').length;
             const pct = Math.floor((completedTasks / totalTasks) * 100);
@@ -564,6 +579,29 @@ export function OnboardingView({ queryParams, setQueryParams }) {
               <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>👋</span>
               No new hires are currently onboarding.
             </p>
+          )}
+          </div>
+          
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: currentPage === 1 ? 'var(--bg-tertiary)' : 'var(--bg-primary)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-primary)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: currentPage === totalPages ? 'var(--bg-tertiary)' : 'var(--bg-primary)', color: currentPage === totalPages ? 'var(--text-muted)' : 'var(--text-primary)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
+              >
+                Next
+              </button>
+            </div>
           )}
         </div>
       )}
