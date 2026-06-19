@@ -406,7 +406,7 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
                   {openTasks.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
                       🎉 No open tasks — great job!
@@ -451,7 +451,7 @@ export default function EmployeeDashboard({ setActiveTab, currentUser }) {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }} className="emp-scrollable-area">
                 {dbData.announcements.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
                     No announcements yet.

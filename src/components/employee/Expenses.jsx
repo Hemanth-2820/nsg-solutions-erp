@@ -119,7 +119,11 @@ export default function Expenses({ currentUser }) {
     <div className="component-container">
       <style dangerouslySetInnerHTML={{ __html: `
         .expenses-layout { display: grid; grid-template-columns: 1fr; gap: 24px; align-items: start; }
-        @media (min-width: 992px) { .expenses-layout { grid-template-columns: 420px 1fr; } }
+        @media (min-width: 992px) { 
+          .expenses-layout { grid-template-columns: 420px 1fr; height: calc(100vh - 180px); } 
+          .expenses-table-card { height: 100%; max-height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+          .form-column-wrapper { height: 100%; max-height: 100%; overflow-y: auto; padding-right: 4px; }
+        }
         .expenses-table-card { min-height: 480px; display: flex; flex-direction: column; }
         .expense-row-selected { background-color: rgba(16, 185, 129, 0.03); border-left: 3px solid var(--accent-green) !important; }
         .expense-tr-row { height: 52px; cursor: pointer; transition: background-color 0.2s ease; }
@@ -133,6 +137,9 @@ export default function Expenses({ currentUser }) {
         .mobile-tab-btn { flex: 1; border: none; background: none; padding: 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
         .mobile-tab-btn.active { background-color: var(--accent-green); color: white; }
         @keyframes slideUpExp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        /* Scrollbar for form wrapper */
+        .form-column-wrapper::-webkit-scrollbar { width: 4px; }
+        .form-column-wrapper::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
       ` }} />
 
       {toast && (
@@ -185,7 +192,7 @@ export default function Expenses({ currentUser }) {
 
       <div className="expenses-layout">
         {(!isMobile || mobileTab === 'form') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="form-column-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <ExpenseForm onSubmitClaim={handleSubmitClaim} />
           </div>
         )}

@@ -145,13 +145,22 @@ export default function Resignation({ currentUser }) {
         @media (min-width: 1024px) {
           .resignation-layout-grid {
             grid-template-columns: 1.2fr 1fr;
+            grid-template-rows: minmax(0, 1fr) auto;
             grid-template-areas: 
               "main tracker"
               "checklist checklist";
+            height: calc(100vh - 180px);
           }
-          .area-main { grid-area: main; order: unset; }
-          .area-tracker { grid-area: tracker; order: unset; }
+          .area-main, .area-tracker { 
+            grid-area: main; order: unset; 
+            height: 100%; max-height: 100%; 
+            overflow-y: auto; padding-right: 4px; 
+          }
+          .area-tracker { grid-area: tracker; }
           .area-checklist { grid-area: checklist; order: unset; }
+          
+          .area-main::-webkit-scrollbar, .area-tracker::-webkit-scrollbar { width: 4px; }
+          .area-main::-webkit-scrollbar-thumb, .area-tracker::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         }
 
         .status-card {
