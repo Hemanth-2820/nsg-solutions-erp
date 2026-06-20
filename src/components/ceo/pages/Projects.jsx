@@ -26,8 +26,11 @@ export default function Projects({ currentUser }) {
   const [saving, setSaving] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProject, setNewProject] = useState({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
+  const [newProject, setNewProject] = useState({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '', attachments: '' });
   const [creating, setCreating] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const [projectToDelete, setProjectToDelete] = useState(null);
 
   
 
@@ -50,6 +53,37 @@ export default function Projects({ currentUser }) {
   };
 
   useEffect(() => { fetchProjects(); }, []);
+
+  const handleFileUpload = async (e, setter, stateObj) => {
+    const files = Array.from(e.target.files);
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    
+    let currentAttachments = [];
+    try {
+      currentAttachments = stateObj.attachments ? JSON.parse(stateObj.attachments) : [];
+    } catch(e) { currentAttachments = []; }
+
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/ceo-portal/projects/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        const data = await res.json();
+        currentAttachments.push({ name: file.name, url: data.url });
+      }
+      setter({ ...stateObj, attachments: JSON.stringify(currentAttachments) });
+    } catch (err) {
+      alert('File upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const getBudgetColor = (used, total) => {
     const pct = used / total;
@@ -93,7 +127,8 @@ export default function Projects({ currentUser }) {
           used: Number(editProject.used),
           status: editProject.status,
           deadline: editProject.deadline,
-          checklist: editProject.checklist
+          checklist: editProject.checklist,
+          attachments: editProject.attachments
         })
       });
       if (!res.ok) throw new Error('Save failed');
@@ -122,14 +157,15 @@ export default function Projects({ currentUser }) {
           used: Number(newProject.used) || 0,
           status: newProject.status,
           deadline: newProject.deadline,
-          checklist: newProject.checklist
+          checklist: newProject.checklist,
+          attachments: newProject.attachments
         })
       });
       if (!res.ok) throw new Error('Create failed');
       const created = await res.json();
       mutateProjects();
       setShowCreateModal(false);
-      setNewProject({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '' });
+      setNewProject({ name: '', client: '', department: '', budget: '', used: '', status: 'Active', deadline: '', checklist: '', attachments: '' });
     } catch (err) {
       alert('Failed to create project: ' + err.message);
     } finally {
@@ -138,7 +174,6 @@ export default function Projects({ currentUser }) {
   };
 
   const handleDeleteProject = async (id) => {
-    if (!window.confirm("Are you sure you want to permanently delete this project?")) return;
     try {
       const res = await fetch(`/api/ceo-portal/projects/${id}`, {
         method: 'DELETE',
@@ -146,9 +181,11 @@ export default function Projects({ currentUser }) {
       });
       if (!res.ok) throw new Error('Delete failed');
       mutateProjects();
-      alert('Project deleted successfully.');
+      if (typeof alert !== "undefined") alert('Project deleted successfully.');
     } catch (err) {
-      alert('Failed to delete project: ' + err.message);
+      if (typeof alert !== "undefined") alert('Failed to delete project: ' + err.message);
+    } finally {
+      setProjectToDelete(null);
     }
   };
 
@@ -266,9 +303,20 @@ export default function Projects({ currentUser }) {
                   <button className="ceo-btn" onClick={() => setEditProject({...proj})}>
                     Edit
                   </button>
-                  <button className="ceo-btn" style={{ color: 'var(--ceo-danger)', borderColor: 'var(--ceo-danger)' }} onClick={() => handleDeleteProject(proj.id)}>
-                    Delete
-                  </button>
+                  {projectToDelete === proj.id ? (
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button className="ceo-btn" style={{ color: '#fff', background: 'var(--ceo-danger)', borderColor: 'var(--ceo-danger)' }} onClick={() => handleDeleteProject(proj.id)}>
+                        Sure?
+                      </button>
+                      <button className="ceo-btn" onClick={() => setProjectToDelete(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="ceo-btn" style={{ color: 'var(--ceo-danger)', borderColor: 'var(--ceo-danger)' }} onClick={() => setProjectToDelete(proj.id)}>
+                      Delete
+                    </button>
+                  )}
                 </div>
                 <button 
                   className="ceo-btn" 
@@ -395,20 +443,39 @@ export default function Projects({ currentUser }) {
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Total Budget (₹)</label>
-                  <input required type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.budget} onChange={e => setEditProject({...editProject, budget: e.target.value})} />
+                  <input required type="text" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.budget} onChange={e => setEditProject({...editProject, budget: e.target.value})} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Used Budget (₹)</label>
-                  <input required type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.used} onChange={e => setEditProject({...editProject, used: e.target.value})} />
+                  <input required type="text" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.used} onChange={e => setEditProject({...editProject, used: e.target.value})} />
                 </div>
               </div>
               <div>
                 <label className="ceo-typography-meta">Deadline</label>
-                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.deadline || ''} onChange={e => setEditProject({...editProject, deadline: e.target.value})} />
+                <input required type="date" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.deadline || ''} onChange={e => setEditProject({...editProject, deadline: e.target.value})} />
               </div>
               <div>
                 <label className="ceo-typography-meta">Checklist (comma-separated, optional)</label>
                 <input className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={editProject.checklist || ''} onChange={e => setEditProject({...editProject, checklist: e.target.value})} placeholder="e.g. Design Approved, Backend deployed" />
+              </div>
+              <div>
+                <label className="ceo-typography-meta">Attachments</label>
+                <input type="file" multiple className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} onChange={e => handleFileUpload(e, setEditProject, editProject)} disabled={uploading} />
+                {uploading && <span style={{fontSize: '12px', color: 'var(--ceo-primary)'}}>Uploading...</span>}
+                {editProject.attachments && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {(() => {
+                      try {
+                        const atts = JSON.parse(editProject.attachments);
+                        return atts.map((att, i) => (
+                          <div key={i} style={{fontSize: '13px', background: 'var(--ceo-bg)', padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--ceo-border)'}}>
+                            <a href={att.url} target="_blank" rel="noreferrer" download={att.name} style={{color: 'var(--ceo-primary)', textDecoration: 'none'}}>{att.name}</a>
+                          </div>
+                        ));
+                      } catch(e) { return null; }
+                    })()}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
@@ -459,20 +526,39 @@ export default function Projects({ currentUser }) {
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Total Budget (₹)</label>
-                  <input required type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.budget} onChange={e => setNewProject({...newProject, budget: e.target.value})} placeholder="Enter total budget" />
+                  <input required type="text" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.budget} onChange={e => setNewProject({...newProject, budget: e.target.value})} placeholder="Enter total budget" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ceo-typography-meta">Used Budget (₹)</label>
-                  <input type="number" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.used} onChange={e => setNewProject({...newProject, used: e.target.value})} placeholder="Enter used budget" />
+                  <input type="text" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.used} onChange={e => setNewProject({...newProject, used: e.target.value})} placeholder="Enter used budget" />
                 </div>
               </div>
               <div>
                 <label className="ceo-typography-meta">Deadline</label>
-                <input required className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.deadline} onChange={e => setNewProject({...newProject, deadline: e.target.value})} placeholder="Enter deadline (e.g. Dec 31, 2026)" />
+                <input required type="date" className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.deadline} onChange={e => setNewProject({...newProject, deadline: e.target.value})} placeholder="Enter deadline" />
               </div>
               <div>
                 <label className="ceo-typography-meta">Checklist (comma-separated, optional)</label>
                 <input className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} value={newProject.checklist} onChange={e => setNewProject({...newProject, checklist: e.target.value})} placeholder="e.g. Code reviewed, Tests passed" />
+              </div>
+              <div>
+                <label className="ceo-typography-meta">Attachments</label>
+                <input type="file" multiple className="ceo-form-input" style={{ width: '100%', marginTop: '4px' }} onChange={e => handleFileUpload(e, setNewProject, newProject)} disabled={uploading} />
+                {uploading && <span style={{fontSize: '12px', color: 'var(--ceo-primary)'}}>Uploading...</span>}
+                {newProject.attachments && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {(() => {
+                      try {
+                        const atts = JSON.parse(newProject.attachments);
+                        return atts.map((att, i) => (
+                          <div key={i} style={{fontSize: '13px', background: 'var(--ceo-bg)', padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--ceo-border)'}}>
+                            <a href={att.url} target="_blank" rel="noreferrer" download={att.name} style={{color: 'var(--ceo-primary)', textDecoration: 'none'}}>{att.name}</a>
+                          </div>
+                        ));
+                      } catch(e) { return null; }
+                    })()}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
                 <button type="button" className="ceo-btn" onClick={() => setShowCreateModal(false)}>Cancel</button>

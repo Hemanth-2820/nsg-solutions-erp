@@ -16,6 +16,7 @@ export function RecruitmentView({ queryParams, setQueryParams }) {
 
   const candIdStr = queryParams?.get('candId');
   const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const selectedCandidate = candIdStr ? candidates.find(c => String(c.id) === candIdStr) : null;
   const setSelectedCandidate = (cand) => setQueryParams({ subTab: cand ? 'offer' : '', candId: cand ? String(cand.id) : '' });
 
@@ -80,6 +81,14 @@ export function RecruitmentView({ queryParams, setQueryParams }) {
       if (res.ok) {
         const data = await res.json();
         setCandidates(data);
+      }
+      
+      const empRes = await fetch('/api/hr-portal/employees', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (empRes.ok) {
+        const empData = await empRes.json();
+        setEmployees(empData);
       }
     } catch (err) {
       console.error('Failed to fetch candidates/employees:', err);
@@ -354,9 +363,13 @@ export function RecruitmentView({ queryParams, setQueryParams }) {
               <span>{st.label}</span>
               <span className="badge-pill bg-pink">{candidates.filter(c => {
                 if (c.stage !== st.id) return false;
-                if (st.id === 'joined' && c.created_at) {
-                  const diffDays = (new Date() - new Date(c.created_at)) / (1000 * 60 * 60 * 24);
-                  return diffDays <= 15;
+                if (st.id === 'joined') {
+                  const emp = employees.find(e => e.email === c.email || e.name === c.name);
+                  if (!emp || emp.status === 'active') return false;
+                  if (c.created_at) {
+                    const diffDays = (new Date() - new Date(c.created_at)) / (1000 * 60 * 60 * 24);
+                    if (diffDays > 30) return false;
+                  }
                 }
                 return true;
               }).length}</span>
@@ -366,12 +379,13 @@ export function RecruitmentView({ queryParams, setQueryParams }) {
               {(() => {
                 const stageCandidates = candidates.filter(c => {
                   if (c.stage !== st.id) return false;
-                  if (st.id === 'joined' && c.created_at) {
-                    const createdDate = new Date(c.created_at);
-                    const now = new Date();
-                    const diffTime = now - createdDate;
-                    const diffDays = diffTime / (1000 * 60 * 60 * 24);
-                    return diffDays <= 15;
+                  if (st.id === 'joined') {
+                    const emp = employees.find(e => e.email === c.email || e.name === c.name);
+                    if (!emp || emp.status === 'active') return false;
+                    if (c.created_at) {
+                      const diffDays = (new Date() - new Date(c.created_at)) / (1000 * 60 * 60 * 24);
+                      if (diffDays > 30) return false;
+                    }
                   }
                   return true;
                 });

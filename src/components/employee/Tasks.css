@@ -254,10 +254,9 @@
   background: transparent;
   color: var(--tk-text-secondary);
   font-size: 0.75rem; font-weight: 600;
-  cursor: pointer;
   transition: all 0.15s;
+  cursor: default;
 }
-.tk-status-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--tk-text-primary); }
 
 /* ── Subtasks ─────────────────────────────────────────────────────────────────── */
 .tk-subtasks { display: flex; flex-direction: column; gap: 0; }

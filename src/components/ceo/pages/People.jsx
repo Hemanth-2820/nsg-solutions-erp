@@ -38,6 +38,8 @@ export default function People() {
   const [designationsList, setDesignationsList] = useState([]);
   const [shiftsList, setShiftsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [employeeAssets, setEmployeeAssets] = useState([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
 
   const fetchEmployees = async () => {
     try {
@@ -57,7 +59,8 @@ export default function People() {
           sysRole: emp.role,
           email: emp.email,
           manager_id: emp.manager_id,
-          shift: emp.shift_timing || ''
+          shift: emp.shift_timing || '',
+          documents: emp.documents ? (typeof emp.documents === 'string' ? JSON.parse(emp.documents) : emp.documents) : []
         }));
         setEmployees(formatted);
       }
@@ -90,6 +93,29 @@ export default function People() {
   React.useEffect(() => {
     fetchEmployees();
   }, []);
+
+  React.useEffect(() => {
+    if (selectedEmp && activeTab === 'Assets') {
+      const fetchAssets = async () => {
+        setIsLoadingAssets(true);
+        try {
+          const token = localStorage.getItem('nsg_jwt_token');
+          const res = await fetch(`/api/hr-portal/onboarding/assets/${selectedEmp.dbId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setEmployeeAssets(data);
+          }
+        } catch (err) {
+          console.error("Failed to fetch assets", err);
+        } finally {
+          setIsLoadingAssets(false);
+        }
+      };
+      fetchAssets();
+    }
+  }, [selectedEmp, activeTab]);
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
@@ -469,7 +495,7 @@ export default function People() {
               
               {/* TABS */}
               <div style={{ display: 'flex', borderBottom: '1px solid var(--ceo-divider)', padding: '0 20px', background: '#FFF' }}>
-                {['Info', 'Documents'].map(tab => (
+                {['Info', 'Documents', 'Assets'].map(tab => (
                   <button 
                     key={tab} 
                     onClick={() => setActiveTab(tab)}
@@ -528,40 +554,77 @@ export default function People() {
                 )}
 
                 {activeTab === 'Documents' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div onClick={() => handleDownload('Employment_Contract.txt')} style={{ padding: '16px 20px', background: '#FFF', border: '1px solid var(--ceo-border)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <FileText size={20} color="var(--ceo-primary)"/>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>Employment Contract.pdf</div>
-                          <div style={{ fontSize: '12px', color: 'var(--ceo-text-muted)', marginTop: '2px', fontWeight: 500 }}>Signed on {selectedEmp.joinDate}</div>
-                        </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--ceo-text-muted)', display: 'block', fontWeight: 700, letterSpacing: '0.5px' }}>VERIFIED EMPLOYEE CREDENTIALS VAULT</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                        {selectedEmp.documents && selectedEmp.documents.length > 0 ? (
+                          selectedEmp.documents.map((doc, idx) => (
+                            <div key={idx} style={{ backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--ceo-text-primary)' }}>{doc.type || 'Document'}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--ceo-text-muted)', marginTop: '4px' }}>{doc.name}</div>
+                              </div>
+                              <button
+                                onClick={() => handleDownload(doc.name)}
+                                style={{
+                                  backgroundColor: 'transparent',
+                                  color: '#3b82f6',
+                                  border: '1px solid var(--ceo-border)',
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontWeight: 600
+                                }}
+                              >
+                                <Download size={14} /> Download
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', color: 'var(--ceo-text-muted)' }}>
+                            No verified documents found.
+                          </div>
+                        )}
                       </div>
-                      <Download size={16} color="var(--ceo-primary)" />
                     </div>
-                    <div onClick={() => handleDownload('ID_Proof_Aadhar.txt')} style={{ padding: '16px 20px', background: '#FFF', border: '1px solid var(--ceo-border)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <FileText size={20} color="var(--ceo-primary)"/>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--ceo-text-primary)' }}>ID Proof_Aadhar.pdf</div>
-                          <div style={{ fontSize: '12px', color: 'var(--ceo-text-muted)', marginTop: '2px', fontWeight: 500 }}>Verified</div>
-                        </div>
+                  </div>
+                )}
+
+                {activeTab === 'Assets' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--ceo-text-muted)', display: 'block', fontWeight: 700, letterSpacing: '0.5px' }}>ASSIGNED CORPORATE ASSETS</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                        {isLoadingAssets ? (
+                          <span style={{ color: 'var(--ceo-text-muted)' }}>Loading assets...</span>
+                        ) : employeeAssets.length > 0 ? (
+                          employeeAssets.map(asset => (
+                            <div key={asset.id} style={{ backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--ceo-text-primary)' }}>{asset.name} <span style={{ color: 'var(--ceo-text-muted)', fontWeight: 'normal', fontSize: '12px' }}>({asset.type})</span></div>
+                                <div style={{ fontSize: '11px', color: 'var(--ceo-text-muted)', marginTop: '4px' }}>SN: {asset.serialNumber || 'N/A'} | Tag: {asset.id}</div>
+                              </div>
+                              <span style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>{asset.returnStatus || 'Issued'}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid var(--ceo-border)', color: 'var(--ceo-text-muted)' }}>
+                            No assets assigned yet.
+                          </div>
+                        )}
                       </div>
-                      <Download size={16} color="var(--ceo-primary)" />
                     </div>
                   </div>
                 )}
 
                 {/* Leave Balance tab removed due to fake data rules */}
 
-                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '12px' }}>
-                  <button onClick={() => setIsMessageOpen(true)} className="ceo-btn" style={{ flex: 1, justifyContent: 'center', padding: '10px', fontWeight: 700, background: '#FFF' }}>Send Message</button>
-                  <button onClick={() => setIsFullProfileOpen(true)} className="ceo-btn ceo-btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '10px', fontWeight: 700 }}>Open Full Profile</button>
-                </div>
+
               </div>
             </div>
           </div>

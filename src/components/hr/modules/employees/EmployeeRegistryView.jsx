@@ -67,6 +67,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [editName, setEditName] = useState('');
+  const [editEmpId, setEditEmpId] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editDept, setEditDept] = useState('');
   const [editRole, setEditRole] = useState('');
@@ -535,6 +536,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
         body: JSON.stringify({
           name: editName,
           email: editEmail,
+          emp_id: editEmpId || null,
           department: editDept,
           designation: editRole,
           phone: editPhone,
@@ -627,6 +629,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
   const openEditModal = (emp) => {
     setEditEmp(emp);
     setEditName(emp.name);
+    setEditEmpId(emp.emp_id || '');
     setEditEmail(emp.email);
     setEditDept(emp.department || 'Engineering');
     setEditRole(emp.designation || 'Developer');
@@ -1281,6 +1284,11 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)' }}>EMAIL ADDRESS *</label>
                 <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)' }}>EMPLOYEE ID</label>
+                <input type="text" value={editEmpId} onChange={(e) => setEditEmpId(e.target.value)} placeholder="Auto-generated if left blank" style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '10px 12px', borderRadius: '8px' }} />
               </div>
 
               <div>
