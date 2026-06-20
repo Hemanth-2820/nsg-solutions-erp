@@ -287,7 +287,7 @@ def create_team_task(req: TaskCreateRequest, current_user: models.User = Depends
         title=req.title,
         description=req.description,
         priority=req.priority.lower(),
-        status="pending",
+        status="assignee",
         sp=req.sp,
         due=req.due,
         custom_data=req.custom_data,
@@ -901,6 +901,7 @@ class ProjectResponse(BaseModel):
     deadline: Optional[str] = None
     checklist: Optional[str] = None
     department: Optional[str] = None
+    attachments: Optional[str] = None
 
     class Config:
         from_attributes = True

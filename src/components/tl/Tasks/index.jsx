@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import useSWR from 'swr';
 import AvatarFallback from '../../common/AvatarFallback';
 import styles from './tasks.module.css';
-import { PlusSquare, List, XCircle, GitPullRequest, Edit, UserPlus, RotateCcw, Check, X } from 'lucide-react';
+import { PlusSquare, List, XCircle, GitPullRequest, Edit, UserPlus, RotateCcw, Check, X, Eye } from 'lucide-react';
 
 export default function Tasks({ currentUser }) {
   const [activeView, setActiveView] = useState('create'); // 'create', 'list', 'rejected', 'pr'
@@ -10,6 +10,11 @@ export default function Tasks({ currentUser }) {
   const [subtasks, setSubtasks] = useState(['']);
   const [groupBy, setGroupBy] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeView, groupBy]);
 
   const token = localStorage.getItem('nsg_jwt_token');
   const fetcher = (url) => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json());
@@ -20,7 +25,7 @@ export default function Tasks({ currentUser }) {
   const { data: backendSprints } = useSWR('/api/team-lead/sprints', fetcher);
 
   const savedSprints = (() => {
-    if (backendSprints && backendSprints.length > 0) {
+    if (backendSprints !== undefined) {
       return backendSprints;
     }
     const local = localStorage.getItem('nsg_saved_sprints');
@@ -180,6 +185,64 @@ export default function Tasks({ currentUser }) {
     } catch (err) { console.error(err); }
   };
 
+  const handleAcceptRequest = async (taskId, currentCustomData, currentStatus) => {
+    // REJECT → Approve → Reassign
+    if (currentStatus === 'blocked') {
+      // Open the reassign modal instead of changing status
+      const updatedCustomData = { ...currentCustomData };
+      delete updatedCustomData.approval_requested;
+      try {
+        const res = await fetch(`/api/team-lead/tasks/${taskId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('nsg_jwt_token')}`
+          },
+          body: JSON.stringify({
+            status: 'blocked',
+            custom_data: JSON.stringify(updatedCustomData)
+          })
+        });
+        if (res.ok) mutateTasks();
+      } catch (err) { console.error(err); }
+      handleReassignTask(taskId);
+      return;
+    }
+
+    // TODO (pending) → Approve → IN-PROGRESS
+    // IN-PROGRESS → Approve → TESTING
+    // TESTING → Approve → PR
+    // PR → Approve → DONE
+    let nextStatus = 'in-progress';
+    if (currentStatus === 'pending') nextStatus = 'in-progress';
+    else if (currentStatus === 'in-progress') nextStatus = 'testing';
+    else if (currentStatus === 'testing') nextStatus = 'pr';
+    else if (currentStatus === 'pr') nextStatus = 'done';
+
+    try {
+      const updatedCustomData = { ...currentCustomData };
+      delete updatedCustomData.approval_requested;
+      const res = await fetch(`/api/team-lead/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('nsg_jwt_token')}`
+        },
+        body: JSON.stringify({
+          status: nextStatus,
+          custom_data: JSON.stringify(updatedCustomData)
+        })
+      });
+      if (res.ok) {
+        if (window.toast) window.toast.success(`Task moved to ${nextStatus}`);
+        mutateTasks();
+      } else {
+        const data = await res.json();
+        if (window.toast) window.toast.error(data.detail || "Failed to accept request");
+      }
+    } catch (err) { console.error(err); }
+  };
+
   const getStatusLabel = (status) => {
     if (status === 'pending') return 'To Do';
     if (status === 'in-progress') return 'In Progress';
@@ -199,7 +262,6 @@ export default function Tasks({ currentUser }) {
   };
 
   const taskList = tasks
-    .filter(t => t.status !== 'done')
     .map(t => ({
       id: t.id,
       project: t.project || 'NSG-ERP Core',
@@ -210,13 +272,15 @@ export default function Tasks({ currentUser }) {
       status: getStatusLabel(t.status),
       points: t.sp || 1,
       due: t.due || 'TBD',
-      sprint: t.sprint || 'Backlog'
+      sprint: t.sprint || 'Backlog',
+      custom_data: t.custom_data,
+      raw_status: t.status
     }));
   
   const handleCreateTask = async (e) => {
     e.preventDefault();
-    if(!taskTitle.trim() || !taskAssignee) {
-      alert("Please enter a task title and select an assignee");
+    if(!taskTitle.trim() || !taskAssignee || !taskProject || !taskSprint) {
+      alert("Please enter a task title, select an assignee, select a project, and select a sprint ID");
       return;
     }
     const priorityVal = taskPriority.toLowerCase();
@@ -389,6 +453,9 @@ export default function Tasks({ currentUser }) {
         <button className={`${styles.navTab} ${activeView === 'list' ? styles.activeTab : ''}`} onClick={() => setActiveView('list')}>
           <List size={16} /> Task List View
         </button>
+        <button className={`${styles.navTab} ${activeView === 'assignee' ? styles.activeTab : ''}`} onClick={() => setActiveView('assignee')}>
+          Assignee
+        </button>
         <button className={`${styles.navTab} ${activeView === 'todo' ? styles.activeTab : ''}`} onClick={() => setActiveView('todo')}>
           Todo
         </button>
@@ -403,6 +470,9 @@ export default function Tasks({ currentUser }) {
         </button>
         <button className={`${styles.navTab} ${activeView === 'pr' ? styles.activeTab : ''}`} onClick={() => setActiveView('pr')}>
           PR
+        </button>
+        <button className={`${styles.navTab} ${activeView === 'history' ? styles.activeTab : ''}`} onClick={() => setActiveView('history')}>
+          History
         </button>
       </div>
 
@@ -455,25 +525,27 @@ export default function Tasks({ currentUser }) {
                   ))}
                 </select>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Sprint ID</label>
-                <select className={styles.formSelect} value={taskSprint} onChange={(e) => setTaskSprint(e.target.value)}>
-                  <option value="">Select Sprint ID...</option>
-                  {(() => {
-                    const filteredSprints = taskProjectId
-                      ? savedSprints.filter(s => s.project_id === taskProjectId)
-                      : savedSprints;
-                    if (filteredSprints.length === 0 && taskProjectId) {
-                      return <option disabled value="">No sprints for this project</option>;
-                    }
-                    return filteredSprints.map(s => (
-                      <option key={s.id} value={s.sprintId || s.name}>
-                        {s.name} ({s.sprintId || `SPR-${s.id}`})
-                      </option>
-                    ));
-                  })()}
-                </select>
-              </div>
+              {taskProject && (
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Sprint ID</label>
+                  <select className={styles.formSelect} value={taskSprint} onChange={(e) => setTaskSprint(e.target.value)}>
+                    <option value="">Select Sprint ID...</option>
+                    {(() => {
+                      const filteredSprints = taskProjectId
+                        ? savedSprints.filter(s => s.project_id === taskProjectId)
+                        : savedSprints;
+                      if (filteredSprints.length === 0 && taskProjectId) {
+                        return <option disabled value="">No sprints for this project</option>;
+                      }
+                      return filteredSprints.map(s => (
+                        <option key={s.id} value={s.sprintId || s.name}>
+                          {s.name} ({s.sprintId || `SPR-${s.id}`})
+                        </option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+              )}
               <div className={`${styles.formGroup} ${styles.fullWidth}`}>
                 <label className={styles.formLabel}>Subtasks</label>
                 <div className={styles.subtaskList}>
@@ -754,7 +826,9 @@ export default function Tasks({ currentUser }) {
                 </div>
               )}
               <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-                <button className={styles.submitBtn} style={{ marginTop: 0 }} onClick={handleCreateTask}>{editingTaskId ? "Update Task" : "Create Task"}</button>
+                {!editingTaskId && (
+                  <button className={styles.submitBtn} style={{ marginTop: 0 }} onClick={handleCreateTask}>Create Task</button>
+                )}
                 {editingTaskId && (
                   <button
                     type="button"
@@ -775,7 +849,7 @@ export default function Tasks({ currentUser }) {
                       setSubtasks(['']);
                     }}
                   >
-                    Cancel Edit
+                    Close
                   </button>
                 )}
               </div>
@@ -783,28 +857,33 @@ export default function Tasks({ currentUser }) {
           </div>
         )}
 
-        {(activeView === 'list' || activeView === 'todo' || activeView === 'inprogress' || activeView === 'testing' || activeView === 'rejected' || activeView === 'pr') && (() => {
+        {(activeView === 'list' || activeView === 'assignee' || activeView === 'todo' || activeView === 'inprogress' || activeView === 'testing' || activeView === 'rejected' || activeView === 'pr' || activeView === 'history') && (() => {
           const statusTitles = {
             list:       'Sprint Backlog Overview — All Tasks',
+            assignee:   'Assignee Tasks',
             todo:       'Todo Tasks',
             inprogress: 'In-Progress Tasks',
             testing:    'Testing Tasks',
             rejected:   'Rejected / Requires Rework',
-            pr:         'PR Review'
+            pr:         'PR Review',
+            history:    'History (Done Tasks)'
           };
 
           // Filter tasks per active tab
           const baseList =
-            activeView === 'todo'       ? taskList.filter(t => t.status === 'To Do')
+            activeView === 'assignee'   ? taskList.filter(t => t.status === 'assignee')
+            : activeView === 'todo'       ? taskList.filter(t => t.status === 'pending' || t.status === 'To Do')
             : activeView === 'inprogress' ? taskList.filter(t => t.status === 'In Progress')
             : activeView === 'testing'    ? taskList.filter(t => t.status === 'testing')
             : activeView === 'rejected'   ? taskList.filter(t => t.status === 'Blocked')
             : activeView === 'pr'         ? taskList.filter(t => t.status === 'pr')
-            : taskList; // 'list' = All
+            : activeView === 'history'    ? taskList.filter(t => t.status === 'Done')
+            : taskList.filter(t => t.status !== 'Done'); // 'list' = All (excluding done)
 
           // Extra group-by filter only for the 'All' list view
           const applyGroupFilter = (list) => {
             if (activeView !== 'list') return list;
+            if (groupBy === 'Assignee')    return list.filter(t => t.status === 'assignee');
             if (groupBy === 'Todo')        return list.filter(t => t.status === 'To Do');
             if (groupBy === 'In-Progress') return list.filter(t => t.status === 'In Progress');
             if (groupBy === 'Testing')     return list.filter(t => t.status === 'testing');
@@ -815,9 +894,14 @@ export default function Tasks({ currentUser }) {
 
           const viewFilteredList = applyGroupFilter(baseList);
 
+          const ITEMS_PER_PAGE = 10;
+          const totalPages = Math.ceil(viewFilteredList.length / ITEMS_PER_PAGE);
+          const paginatedList = viewFilteredList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
           // Status badge style helper
           const getStatusBadgeStyle = (status) => {
-            if (status === 'To Do')      return { background: '#e0f2fe', color: '#0369a1' };
+            if (status === 'assignee')   return { background: '#dbeafe', color: '#1e40af' };
+            if (status === 'To Do' || status === 'pending')      return { background: '#e0f2fe', color: '#0369a1' };
             if (status === 'In Progress') return { background: '#ede9fe', color: '#7c3aed' };
             if (status === 'testing')    return { background: '#fef9c3', color: '#854d0e' };
             if (status === 'Blocked')    return { background: '#fee2e2', color: '#ef4444' };
@@ -834,6 +918,7 @@ export default function Tasks({ currentUser }) {
                     <label className={styles.formLabel} style={{marginBottom: 0}}>Filter:</label>
                     <select className={styles.groupSelect} value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
                       <option value="All">All</option>
+                      <option value="Assignee">Assignee</option>
                       <option value="Todo">Todo</option>
                       <option value="In-Progress">In-Progress</option>
                       <option value="Testing">Testing</option>
@@ -858,7 +943,7 @@ export default function Tasks({ currentUser }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {viewFilteredList.map(task => (
+                    {paginatedList.map(task => (
                       <tr key={task.id}>
                         <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{task.project}</td>
                         <td className={styles.taskTitle}>{task.title}</td>
@@ -875,7 +960,8 @@ export default function Tasks({ currentUser }) {
                         </td>
                         <td>
                           <span className={styles.badge} style={getStatusBadgeStyle(task.status)}>
-                            {task.status === 'To Do' ? 'TODO'
+                            {task.status === 'assignee' ? 'ASSIGNEE'
+                              : task.status === 'To Do' || task.status === 'pending' ? 'TODO'
                               : task.status === 'In Progress' ? 'IN-PROGRESS'
                               : task.status === 'testing' ? 'TESTING'
                               : task.status === 'Blocked' ? 'REJECT'
@@ -887,25 +973,59 @@ export default function Tasks({ currentUser }) {
                         <td>{task.due}</td>
                         <td>
                           <div className={styles.actionGroup}>
-                            <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => handleEditTask(task)}><Edit size={12}/> Edit</button>
+                            <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => handleEditTask(task)}><Eye size={12}/> View</button>
                             {activeView === 'pr' ? (
                               <>
                                 <button className={`${styles.actionBtn} ${styles.success}`} onClick={() => handleApprovePr(task.id)}><Check size={12}/> Approve</button>
                                 <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => handleRejectPr(task.id)}><X size={12}/> Reject</button>
                               </>
                             ) : (
-                              <button className={`${styles.actionBtn}`} onClick={() => handleReassignTask(task.id)}><UserPlus size={12}/> Reassign</button>
+                              <>
+                                {(() => {
+                                  try {
+                                    const customData = task.custom_data ? JSON.parse(task.custom_data) : {};
+                                    if (customData.approval_requested) {
+                                      return (
+                                        <button className={`${styles.actionBtn} ${styles.success}`} onClick={() => handleAcceptRequest(task.id, customData, task.raw_status)}>
+                                          <Check size={12}/> Approve
+                                        </button>
+                                      );
+                                    }
+                                  } catch(e) {}
+                                  return null;
+                                })()}
+                                {activeView !== 'history' && (
+                                  <button className={`${styles.actionBtn}`} onClick={() => handleReassignTask(task.id)}><UserPlus size={12}/> Reassign</button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {viewFilteredList.length === 0 && (
+                    {paginatedList.length === 0 && (
                       <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>No tasks found.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', padding: '16px' }}>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 500, border: '1px solid #e2e8f0', borderRadius: '6px', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
+                  >Previous</button>
+                  <span style={{ padding: '4px 12px', fontSize: '14px', fontWeight: 500, color: '#475569' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 500, border: '1px solid #e2e8f0', borderRadius: '6px', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
+                  >Next</button>
+                </div>
+              )}
             </div>
           );
         })()}

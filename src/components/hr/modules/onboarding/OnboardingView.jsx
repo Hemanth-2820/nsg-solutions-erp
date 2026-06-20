@@ -532,15 +532,7 @@ export function OnboardingView({ queryParams, setQueryParams }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px' }}>
-                      <span>Checklist Completion:</span>
-                      <strong>{pct}% ({completedTasks}/{totalTasks})</strong>
-                    </div>
-                    <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--accent-pink)' }}></div>
-                    </div>
-                  </div>
+
 
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
                     <span style={{ textTransform: 'uppercase', display: 'block', fontSize: '9px' }}>Next Pending Action</span>

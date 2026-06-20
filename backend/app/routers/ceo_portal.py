@@ -9,6 +9,7 @@ import json
 import hashlib
 import os
 import shutil
+import uuid
 from app import models, database
 from app.core import security
 
@@ -58,6 +59,9 @@ class UserDetailResponse(BaseModel):
     photo: Optional[str]
     last_active: Optional[datetime] = None
     shift_timing: Optional[str] = None
+    phone: Optional[str] = None
+    manager_id: Optional[int] = None
+    documents: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -103,6 +107,7 @@ class ProjectCreate(BaseModel):
     deadline: str
     checklist: Optional[str] = None
     department: Optional[str] = None
+    attachments: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -113,6 +118,7 @@ class ProjectUpdate(BaseModel):
     deadline: Optional[str] = None
     checklist: Optional[str] = None
     department: Optional[str] = None
+    attachments: Optional[str] = None
 
 class VendorCreate(BaseModel):
     vendor_id: str
@@ -553,7 +559,8 @@ def create_project(req: ProjectCreate, current_user: models.User = Depends(secur
         status=req.status,
         deadline=req.deadline,
         checklist=req.checklist,
-        department=req.department
+        department=req.department,
+        attachments=req.attachments
     )
     db.add(proj)
     db.commit()
@@ -568,7 +575,14 @@ def update_project(project_id: int, req: ProjectUpdate, current_user: models.Use
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
         
-    if req.name is not None: proj.name = req.name
+    if req.name is not None and req.name != proj.name:
+        old_name = proj.name
+        proj.name = req.name
+        db.query(models.Task).filter(models.Task.project == old_name).update({models.Task.project: req.name}, synchronize_session=False)
+        db.query(models.DailyTimesheet).filter(models.DailyTimesheet.project == old_name).update({models.DailyTimesheet.project: req.name}, synchronize_session=False)
+    elif req.name is not None:
+        proj.name = req.name
+
     if req.client is not None: proj.client = req.client
     if req.budget is not None: proj.budget = req.budget
     if req.used is not None: proj.used = req.used
@@ -576,11 +590,24 @@ def update_project(project_id: int, req: ProjectUpdate, current_user: models.Use
     if req.deadline is not None: proj.deadline = req.deadline
     if req.checklist is not None: proj.checklist = req.checklist
     if req.department is not None: proj.department = req.department
+    if req.attachments is not None: proj.attachments = req.attachments
         
     db.commit()
     db.refresh(proj)
     proj.milestones = db.query(models.Milestone).filter(models.Milestone.project_id == proj.id).all()
     return proj
+
+@router.post("/projects/upload")
+async def upload_project_file(file: UploadFile = File(...), current_user: models.User = Depends(security.get_current_user)):
+    verify_ceo_role(current_user)
+    try:
+        os.makedirs("uploads/projects", exist_ok=True)
+        file_path = f"uploads/projects/{uuid.uuid4()}_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"url": f"/api/files/{file_path}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects/{project_id}/signoff", response_model=ProjectResponse)
 def signoff_project(project_id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
@@ -612,6 +639,26 @@ def delete_project_by_ceo(project_id: int, current_user: models.User = Depends(s
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
         
+    # Gather tasks first
+    tasks_to_delete = db.query(models.Task).filter(models.Task.project == proj.name).all()
+    task_ids = [t.id for t in tasks_to_delete]
+    
+    if task_ids:
+        # Explicitly delete related task components and timesheet rows to prevent orphaned records
+        db.query(models.TaskAttachment).filter(models.TaskAttachment.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.TaskSubtask).filter(models.TaskSubtask.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.TimesheetRow).filter(models.TimesheetRow.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.Task).filter(models.Task.id.in_(task_ids)).delete(synchronize_session=False)
+
+    # Delete Daily Timesheets
+    db.query(models.DailyTimesheet).filter(models.DailyTimesheet.project == proj.name).delete(synchronize_session=False)
+
+    # Delete related sprints
+    db.query(models.Sprint).filter(models.Sprint.project_id == proj.id).delete(synchronize_session=False)
+
+    # Delete related milestones
+    db.query(models.Milestone).filter(models.Milestone.project_id == proj.id).delete(synchronize_session=False)
+
     db.delete(proj)
     db.commit()
     return {"status": "success", "message": "Project deleted."}

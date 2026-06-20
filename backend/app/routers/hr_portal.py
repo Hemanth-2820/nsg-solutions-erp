@@ -144,6 +144,7 @@ class EmployeeCreateResponse(BaseModel):
 class EmployeeUpdateRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    emp_id: Optional[str] = None
     role: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
@@ -689,7 +690,7 @@ def transition_candidate_to_employee(id: int, current_user: models.User = Depend
     
     # Auto setup dates
     today = date.today()
-    probation_end = date.fromordinal(today.toordinal() + 180) # 6 months
+    probation_end = date.fromordinal(today.toordinal() + 30) # 1 month
     
     # Initial documents list
     initial_docs = []
@@ -873,7 +874,7 @@ def add_employee(req: EmployeeCreateRequest, current_user: models.User = Depends
                 except ValueError:
                     pass
         emp_id = f"NSG-0{max_serial + 1}"
-    probation_end = date.fromordinal(req.join_date.toordinal() + 180)
+    probation_end = date.fromordinal(req.join_date.toordinal() + 30)
     
     initial_docs = []
     
@@ -1068,6 +1069,13 @@ def update_employee(id: int, req: EmployeeUpdateRequest, current_user: models.Us
 
     if req.name is not None:
         emp.name = req.name
+    if req.emp_id is not None:
+        # Check uniqueness only if emp_id actually changed
+        if req.emp_id != emp.emp_id:
+            exists = db.query(models.User).filter(models.User.emp_id == req.emp_id, models.User.id != id).first()
+            if exists:
+                raise HTTPException(status_code=400, detail="Another employee already uses this Employee ID.")
+        emp.emp_id = req.emp_id
     if req.email is not None:
         # Check uniqueness only if email actually changed
         if req.email != emp.email:
