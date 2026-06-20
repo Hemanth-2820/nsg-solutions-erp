@@ -1635,6 +1635,8 @@ class AppraisalScorecardResponse(BaseModel):
     tl_name: str
     rating: str
     comments: str
+    emp_acknowledged: bool
+    hr_acknowledged: bool
 
     class Config:
         from_attributes = True
@@ -1660,6 +1662,8 @@ def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.
     if not scorecard:
         raise HTTPException(status_code=404, detail="Scorecard not found.")
     
+    scorecard.emp_acknowledged = True
+    
     tl_user = db.query(models.User).filter(models.User.name == scorecard.tl_name).first()
     if tl_user:
         db_notify = models.Notification(
@@ -1668,6 +1672,8 @@ def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.
             type="info"
         )
         db.add(db_notify)
+        db.commit()
+    else:
         db.commit()
     return {"status": "success", "message": "Scorecard acknowledged."}
 
