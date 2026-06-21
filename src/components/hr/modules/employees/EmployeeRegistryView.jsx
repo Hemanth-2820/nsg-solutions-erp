@@ -5,8 +5,10 @@ import { notify } from '../../utils/notify';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import styles from './employeeRegistry.module.css';
+import { useCompany } from '../../../common/CompanyContext';
 
 export function EmployeeRegistryView({ queryParams, setQueryParams }) {
+  const { companyName, companyLogo } = useCompany();
   const [db, onUpdateDb] = useState({ employees: [], auditLogs: [], trainingProgress: [], onboardingTasks: [], leaveBalances: [], attendanceLogs: [], payslips: [] });
 
   const [search, setSearch] = useState('');
@@ -207,7 +209,8 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
     const doc = new jsPDF('landscape', 'pt', 'a4');
     
     const img = new Image();
-    img.src = '/hmns-logo.png';
+    img.crossOrigin = "Anonymous";
+    img.src = companyLogo || '/hmns-logo.png';
     
     const renderPDF = () => {
       // Premium White Header
@@ -222,7 +225,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
       } catch (e) {
         doc.setFontSize(20);
         doc.setTextColor(15, 23, 42);
-        doc.text('HMNS Software Solution', 40, 50);
+        doc.text(companyName, 40, 50);
       }
       
       // Divider Line

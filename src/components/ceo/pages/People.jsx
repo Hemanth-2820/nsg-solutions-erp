@@ -3,11 +3,13 @@ import { Search, Filter, Download, XCircle, Mail, Phone, Award, UserPlus, FileTe
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import '../CEO.css';
+import { useCompany } from '../../common/CompanyContext';
 
 
 
 
 export default function People() {
+  const { companyName, companyLogo } = useCompany();
   const [employees, setEmployees] = useState([]);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [activeTab, setActiveTab] = useState('Info');
@@ -279,28 +281,36 @@ export default function People() {
     }
     const doc = new jsPDF('landscape');
     
-    doc.setFontSize(18);
-    doc.text("Employees Export", 14, 22);
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = companyLogo || '/hmns-logo.png';
+    img.onload = () => {
+      doc.addImage(img, 'PNG', 14, 10, 30, 10);
+      doc.setFontSize(18);
+      doc.text(`${companyName || 'HMNS'} - Employees Export`, 14, 30);
 
-    const headers = [["Employee ID", "Name", "Email", "Department", "Designation", "System Role", "Status", "Join Date"]];
-    const data = filteredEmployees.map(emp => [
-      emp.id,
-      emp.name,
-      emp.email,
-      emp.dept,
-      emp.role,
-      emp.sysRole,
-      emp.status,
-      emp.joinDate
-    ]);
+      const headers = [["Employee ID", "Name", "Email", "Department", "Designation", "System Role", "Status", "Join Date"]];
+      const data = filteredEmployees.map(emp => [
+        emp.id,
+        emp.name,
+        emp.email,
+        emp.dept,
+        emp.role,
+        emp.sysRole,
+        emp.status,
+        emp.joinDate
+      ]);
 
-    doc.autoTable({
-      startY: 30,
-      head: headers,
-      body: data,
-    });
+      doc.autoTable({
+        startY: 38,
+        head: headers,
+        body: data,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [236, 72, 153] },
+      });
 
-    doc.save('employees_export.pdf');
+      doc.save('employees_export.pdf');
+    };
   };
 
   const handleDownload = (filename) => {

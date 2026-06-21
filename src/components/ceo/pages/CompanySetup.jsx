@@ -4,6 +4,7 @@ import {
   Trash2, Edit2, Save, AlertCircle, ChevronDown, ChevronRight, Upload,
   CheckCircle, Users, Settings, Filter, X, MapPin
 } from 'lucide-react';
+import { useCompany } from '../../common/CompanyContext';
 import '../CEO.css';
 
 // ==========================================
@@ -148,6 +149,7 @@ const DeptTreeNode = ({ dept, level = 0, onAdd, onEdit, onDelete }) => {
 // ==========================================
 export default function CompanySetup() {
   const [activeTab, setActiveTab] = useState('profile');
+  const { refreshCompanyConfig } = useCompany();
   
   // Database States
   const [deptTree, setDeptTree] = useState(initialDeptTree);
@@ -303,6 +305,7 @@ export default function CompanySetup() {
     setIsSaving(false);
     if (results.every(r => r)) {
       showToast('Profile configuration saved securely.');
+      refreshCompanyConfig();
     } else {
       showToast('Error saving profile settings.');
     }
@@ -332,6 +335,7 @@ export default function CompanySetup() {
           setLogoFile(fileName);
           setLogoPreview("http://localhost:8000" + data.file_url);
           showToast('Logo file securely uploaded and saved.');
+          refreshCompanyConfig();
         } else {
           showToast('Error uploading logo to server.');
         }
