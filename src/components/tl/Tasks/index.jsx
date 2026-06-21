@@ -65,6 +65,8 @@ export default function Tasks({ currentUser }) {
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
   const [reassignTaskId, setReassignTaskId] = useState(null);
   const [reassignAssigneeId, setReassignAssigneeId] = useState('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
 
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewTaskData, setViewTaskData] = useState(null);
@@ -189,11 +191,16 @@ export default function Tasks({ currentUser }) {
     } catch (err) { console.error(err); }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm("Are you sure you want to delete this task? This action cannot be undone.")) return;
+  const confirmDelete = (taskId) => {
+    setTaskToDelete(taskId);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
     try {
       const token = localStorage.getItem('nsg_jwt_token');
-      const res = await fetch(`/api/team-lead/tasks/${taskId}`, {
+      const res = await fetch(`/api/team-lead/tasks/${taskToDelete}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -206,7 +213,10 @@ export default function Tasks({ currentUser }) {
         if (window.toast) window.toast.error(data.detail || "Failed to delete task");
         else alert(data.detail || "Failed to delete task");
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); } finally {
+      setDeleteModalOpen(false);
+      setTaskToDelete(null);
+    }
   };
 
   const handleViewTask = (task) => {
@@ -1013,7 +1023,7 @@ export default function Tasks({ currentUser }) {
                           <div className={styles.actionGroup}>
                             <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => handleViewTask(task)}><Eye size={12}/> View</button>
                             <button className={`${styles.actionBtn} ${styles.warning}`} onClick={() => handleEditTask(task)}><Edit size={12}/> Edit</button>
-                            <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => handleDeleteTask(task.id)}><Trash2 size={12}/> Delete</button>
+                            <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => confirmDelete(task.id)}><Trash2 size={12}/> Delete</button>
                             {activeView === 'pr' ? (
                               <>
                                 <button className={`${styles.actionBtn} ${styles.success}`} onClick={() => handleApprovePr(task.id)}><Check size={12}/> Approve</button>
@@ -1118,6 +1128,23 @@ export default function Tasks({ currentUser }) {
                 </button>
                 <button onClick={submitRejectPr} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
                   Reject PR
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteModalOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ backgroundColor: 'var(--bg-primary)', padding: '24px', borderRadius: '8px', width: '400px', border: '1px solid var(--border-color)' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#ef4444' }}>Confirm Deletion</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>Are you sure you want to delete this task? This action cannot be undone.</p>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+                <button onClick={() => { setDeleteModalOpen(false); setTaskToDelete(null); }} style={{ backgroundColor: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={handleDeleteTask} style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+                  Confirm Delete
                 </button>
               </div>
             </div>
