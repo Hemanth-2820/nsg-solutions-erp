@@ -7,7 +7,7 @@ import './Tasks.css';
 
 
 
-const STATUS_FILTERS = ['All', 'Todo', 'In-Progress', 'testing', 'pr', 'Reject'];
+const STATUS_FILTERS = ['All', 'Assignee', 'Todo', 'In-Progress', 'Testing', 'Pr', 'Reject'];
 
 const PRIORITY_COLOR = { high: '#f87171', medium: '#fbbf24', low: '#34d399' };
 const STATUS_COLOR   = { 
@@ -17,16 +17,18 @@ const STATUS_COLOR   = {
   blocked: '#f87171',
   testing: '#fbbf24',
   pr: '#8b5cf6',
-  reject: '#f87171'
+  reject: '#f87171',
+  assignee: '#3b82f6'
 };
 const STATUS_LABEL   = { 
   'in-progress': 'In-Progress', 
   pending: 'Todo', 
   done: 'Done', 
   blocked: 'Reject',
-  testing: 'testing',
-  pr: 'pr',
-  reject: 'Reject'
+  testing: 'Testing',
+  pr: 'Pr',
+  reject: 'Reject',
+  assignee: 'Assignee'
 };
 
 const PR_URL_RE = /^https?:\/\/(github\.com\/[^/]+\/[^/]+\/pull\/\d+|gitlab\.com\/[^/]+\/[^/]+\/-\/merge_requests\/\d+)/;
@@ -337,9 +339,7 @@ function DynamicCustomForm({ task, schema, onUpdate, onClose }) {
           </div>
         );
       })}
-      <button className={`tk-confirm-btn ${loading ? 'tk-confirm-btn--loading' : ''}`} onClick={handleSubmit} disabled={loading} style={{marginTop: 8}}>
-        {loading ? <><span className="tk-spin"/>Saving…</> : 'Save'}
-      </button>
+
     </div>
   );
 }
@@ -396,6 +396,10 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
         }
       };
 
+      // Always request approval when employee saves notes/attachments,
+      // so the TL can approve and advance the status.
+      updatedCustomData.approval_requested = true;
+
       const res = await fetch(`/api/employee-portal/tasks/${task.id}/status`, {
         method: 'PATCH',
         headers: {
@@ -408,8 +412,9 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
         })
       });
       if (res.ok) {
-        onUpdate(task.id, { customData: JSON.stringify(updatedCustomData) });
+        onUpdate(task.id, { customData: JSON.stringify(updatedCustomData), _fromNotes: true });
         if (window.toast) window.toast.success("Notes saved successfully!");
+        if (onClose) onClose();
       } else {
         alert("Failed to save notes");
       }
@@ -499,7 +504,7 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
     onUpdate(task.id, { prStatus: 'submitted', prUrl: url });
   }
 
-  const STATUSES = ['pending', 'in-progress', 'testing', 'pr', 'blocked'];
+  const STATUSES = ['assignee', 'pending', 'in-progress', 'testing', 'pr', 'blocked'];
 
   return (
     <div className="tk-detail-panel" ref={panelRef}>
@@ -558,14 +563,13 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
         <div className="tk-detail-section-label" style={{ marginTop: 24 }}>Update Status</div>
         <div className="tk-status-row">
           {STATUSES.map(s => (
-            <button
+            <div
               key={s}
               className={`tk-status-btn ${status === s ? 'tk-status-btn--active' : ''}`}
               style={status === s ? { borderColor: STATUS_COLOR[s], color: STATUS_COLOR[s], background: `${STATUS_COLOR[s]}18` } : {}}
-              onClick={() => changeStatus(s)}
             >
               {STATUS_LABEL[s]}
-            </button>
+            </div>
           ))}
         </div>
 
@@ -576,7 +580,8 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
               {status === 'pending' || status === 'todo' ? 'Todo Status Notes / Description' :
                status === 'in-progress' ? 'In-Progress Status Notes / Description' :
                status === 'testing' ? 'Testing Status Notes / Description' :
-               status === 'pr' ? 'PR Status Notes / Description' : 'Reject Reason / Description'}
+               status === 'pr' ? 'PR Status Notes / Description' :
+               status === 'assignee' ? 'Assignee Notes / Description' : 'Reject Reason / Description'}
             </div>
             <textarea
               className="tk-textarea"
@@ -632,15 +637,8 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
                 {uploadingStatusAtt ? 'Uploading file...' : '📎 Add Attachment'}
               </label>
             </div>
+            
 
-            <button
-              onClick={() => saveStatusNotesAndAttachments()}
-              disabled={savingNotes}
-              className="tk-confirm-btn"
-              style={{ marginTop: 8, padding: '6px 12px', fontSize: '0.8rem', width: 'auto' }}
-            >
-              {savingNotes ? 'Saving...' : 'Save Notes'}
-            </button>
           </div>
         )}
 
@@ -655,15 +653,37 @@ function TaskDetailPanel({ task, onClose, onUpdate }) {
           <PrSubmitForm task={task} onSubmit={handlePrSubmit} />
         )}
 
-        {/* Save button — always saves notes, never changes status */}
-        <button
-          className="tk-confirm-btn"
-          style={{ marginTop: 20 }}
-          onClick={() => saveStatusNotesAndAttachments()}
-          disabled={savingNotes}
-        >
-          {savingNotes ? 'Saving...' : 'Save'}
-        </button>
+        {/* Save button */}
+        <div style={{ display: 'flex', gap: '12px', marginTop: 20 }}>
+          <button
+            className="tk-confirm-btn"
+            style={{ flex: 1 }}
+            onClick={() => {
+              if (status === 'assignee') {
+                changeStatus('pending'); // 'pending' is the internal status for Todo
+                if (onClose) onClose();
+              } else {
+                saveStatusNotesAndAttachments();
+              }
+            }}
+            disabled={savingNotes}
+          >
+            {savingNotes ? 'Saving...' : (status === 'assignee' ? 'TO GO TODO' : 'Save')}
+          </button>
+          {status === 'assignee' && (
+            <button
+              className="tk-confirm-btn"
+              style={{ flex: 1, background: '#ef4444', borderColor: '#ef4444' }}
+              onClick={() => {
+                changeStatus('blocked');
+                if (onClose) onClose();
+              }}
+              disabled={savingNotes}
+            >
+              GO TO REJECT
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -712,7 +732,7 @@ export default function Tasks() {
     }
     
     // If the change is customData submission without a status change
-    if (changes.customData && !changes.status) {
+    if (changes.customData && !changes.status && !changes._fromNotes) {
       try {
         const token = localStorage.getItem('nsg_jwt_token');
         const currentTask = tasks.find(t => t.id === id);
@@ -784,11 +804,11 @@ export default function Tasks() {
 
   const filtered = tasks.filter(t => {
     const sprintOk = sprint === 'All Sprints' || t.sprint === sprint;
-    const statusOk = statusFilter === 'All'
+    const statusOk = statusFilter === 'All' || statusFilter === 'Assignee'
       || (statusFilter === 'Todo'        && (t.status === 'pending' || t.status === 'todo'))
       || (statusFilter === 'In-Progress' && t.status === 'in-progress')
-      || (statusFilter === 'testing'     && t.status === 'testing')
-      || (statusFilter === 'pr'          && t.status === 'pr')
+      || (statusFilter === 'Testing'     && t.status === 'testing')
+      || (statusFilter === 'Pr'          && t.status === 'pr')
       || (statusFilter === 'Reject'      && (t.status === 'reject' || t.status === 'blocked'));
     return sprintOk && statusOk;
   });

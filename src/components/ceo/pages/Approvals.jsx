@@ -22,7 +22,7 @@ const THEME = {
   warning: '#F59E0B'       
 };
 
-const TABS = ['All', 'Payroll', 'Budget', 'Resignation', 'Policy', 'Promotions', 'Claim Expenses', 'History'];
+const TABS = ['All', 'Payroll', 'Resignation', 'Promotions', 'Claim Expenses', 'Asset Requests', 'History'];
 
 // ==========================================
 // COMPONENTS ARCHITECTURE (AS PER SPEC)
@@ -66,7 +66,7 @@ const ConfirmActionModal = ({ isOpen, actionType, item, onClose, onConfirm }) =>
   )
 }
 
-const ApprovalDetailDrawer = ({ approval, onClose, onAction }) => {
+const ApprovalDetailDrawer = ({ approval, onClose, onAction, activeTab }) => {
   if (!approval) return null;
   return (
     <div style={{ gridArea: 'drawer', background: THEME.bgSurface, borderLeft: `1px solid ${THEME.border}`, display: 'flex', flexDirection: 'column', height: '100%', borderRadius: '0 12px 12px 0' }}>
@@ -141,6 +141,7 @@ const ApprovalDetailDrawer = ({ approval, onClose, onAction }) => {
       </div>
 
       {/* Footer Actions */}
+      {activeTab !== 'History' && (
       <div style={{ padding: '24px', borderTop: `1px solid ${THEME.border}`, background: THEME.bgBase, borderRadius: '0 0 12px 0' }}>
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontSize: '13px', color: THEME.textMuted, marginBottom: '8px', fontWeight: 600 }}>Add Comment (Optional)</label>
@@ -154,7 +155,8 @@ const ApprovalDetailDrawer = ({ approval, onClose, onAction }) => {
           <button onClick={() => onAction('Deny', approval)} style={{ flex: 1, padding: '12px', background: 'transparent', border: `1px solid ${THEME.danger}`, color: THEME.danger, borderRadius: '8px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>Deny</button>
           <button onClick={() => onAction('Approve', approval)} style={{ flex: 2, padding: '12px', background: THEME.primary, border: 'none', color: '#FFF', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: `0 4px 12px ${THEME.primary}40` }}>Approve</button>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -215,7 +217,7 @@ const ApprovalRow = ({ item, isSelected, isChecked, onSelect, onToggleCheck, act
               style={{ padding: '4px 10px', background: THEME.primary, color: '#FFF', border: 'none', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
               onClick={(e) => { e.stopPropagation(); onSelect(item); }}
             >
-              Review <ArrowRight size={14} />
+              {activeTab === 'History' ? 'View' : 'Review'} <ArrowRight size={14} />
             </button>
           )}
         </div>
@@ -232,6 +234,11 @@ const ApprovalTable = ({ data, activeTab, selectedIds, onToggleCheck, onToggleAl
     submittedBy: 'All',
     id: ''
   });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, filterState, searchQuery]);
 
   let filtered = data.filter(a => {
     const isPending = !['Approved', 'Denied'].includes(a.status);
@@ -261,6 +268,10 @@ const ApprovalTable = ({ data, activeTab, selectedIds, onToggleCheck, onToggleAl
       a.requestedBy.toLowerCase().includes(q)
     );
   }
+
+  const ITEMS_PER_PAGE = 10;
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginatedList = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const isAllChecked = filtered.length > 0 && selectedIds.size === filtered.length;
 
@@ -305,6 +316,7 @@ const ApprovalTable = ({ data, activeTab, selectedIds, onToggleCheck, onToggleAl
                       <option value="Policy">Policy</option>
                       <option value="Promotions">Promotions</option>
                       <option value="Claim Expenses">Claim Expenses</option>
+                      <option value="Asset Requests">Asset Requests</option>
                     </select>
                   </div>
 
@@ -380,7 +392,7 @@ const ApprovalTable = ({ data, activeTab, selectedIds, onToggleCheck, onToggleAl
               </tr>
           </thead>
           <tbody>
-            {filtered.map(item => {
+            {paginatedList.map(item => {
               return (
                 <ApprovalRow 
                   key={item.id} 
@@ -395,9 +407,26 @@ const ApprovalTable = ({ data, activeTab, selectedIds, onToggleCheck, onToggleAl
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {paginatedList.length === 0 && (
           <div style={{ padding: '48px', textAlign: 'center', color: THEME.textMuted }}>
             {activeTab === 'History' ? 'No approval history found.' : 'No pending approvals found.'}
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', padding: '16px' }}>
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 500, border: '1px solid #e2e8f0', borderRadius: '6px', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
+            >Previous</button>
+            <span style={{ padding: '4px 12px', fontSize: '14px', fontWeight: 500, color: '#475569' }}>
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={{ padding: '6px 16px', fontSize: '13px', fontWeight: 500, border: '1px solid #e2e8f0', borderRadius: '6px', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
+            >Next</button>
           </div>
         )}
       </div>
@@ -497,7 +526,8 @@ export default function ApprovalsPage() {
     if (!item) return;
 
     try {
-      if (item.id.startsWith('PAY-')) {
+      const idStr = String(item.id);
+      if (idStr.startsWith('PAY-')) {
         const runId = item.payrollRunId;
         if (isApprove) {
           const res = await fetch(`/api/ceo-portal/payroll/runs/${runId}/transfer-bank`, {
@@ -505,7 +535,7 @@ export default function ApprovalsPage() {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (!res.ok) throw new Error('Failed to approve payroll run.');
-          alert('Payroll transfer signed! Payout dispatched and monthly payslips released to all employee dashboards.');
+          window.showToast('Payroll transfer signed! Payout dispatched and monthly payslips released to all employee dashboards.', 'success');
         } else {
           // Deny/Reject Payroll run
           const res = await fetch(`/api/ceo-portal/payroll/runs/${runId}/reject`, {
@@ -513,9 +543,9 @@ export default function ApprovalsPage() {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (!res.ok) throw new Error('Failed to reject payroll run.');
-          alert('Payroll ledger rejected and sent back to HR.');
+          window.showToast('Payroll ledger rejected and sent back to HR.', 'error');
         }
-      } else if (item.id.startsWith('RES-')) {
+      } else if (idStr.startsWith('RES-')) {
         const resignId = item.resignationId;
         const endpoint = `/api/hr-portal/exits/resignations/${resignId}/${action}`;
         const res = await fetch(endpoint, {
@@ -523,11 +553,12 @@ export default function ApprovalsPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error(`Failed to ${action} resignation.`);
-        alert(isApprove
-          ? 'Resignation exit approved! Offboarding clearance checklist updated in HR panel.'
-          : 'Resignation request rejected.'
+        window.showToast(isApprove
+          ? (item.type === 'Resignation Withdraw' ? 'Resignation withdrawal approved!' : 'Resignation exit approved! Offboarding clearance checklist updated in HR panel.')
+          : (item.type === 'Resignation Withdraw' ? 'Resignation withdrawal rejected.' : 'Resignation request rejected.'),
+          isApprove ? 'success' : 'error'
         );
-      } else if (item.id.startsWith('BUD-')) {
+      } else if (idStr.startsWith('BUD-')) {
         const budgetId = item.budgetId;
         const endpoint = `/api/ceo-portal/finance/budgets/${budgetId}/${action}`;
         const res = await fetch(endpoint, {
@@ -535,8 +566,8 @@ export default function ApprovalsPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error(`Failed to ${action} budget.`);
-        alert(`Budget request ${isApprove ? 'approved' : 'rejected'} successfully.`);
-      } else if (item.id.startsWith('POL-')) {
+        window.showToast(`Budget request ${isApprove ? 'approved' : 'rejected'} successfully.`, isApprove ? 'success' : 'error');
+      } else if (idStr.startsWith('POL-')) {
         const policyId = item.policyId;
         const endpoint = `/api/ceo-portal/policies/${policyId}/${action}`;
         const res = await fetch(endpoint, {
@@ -544,8 +575,8 @@ export default function ApprovalsPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error(`Failed to ${action} policy.`);
-        alert(`Company policy ${isApprove ? 'approved' : 'rejected'} successfully.`);
-      } else if (item.id.startsWith('EXP-')) {
+        window.showToast(`Company policy ${isApprove ? 'approved' : 'rejected'} successfully.`, isApprove ? 'success' : 'error');
+      } else if (idStr.startsWith('EXP-')) {
         const expenseId = item.expenseId;
         const endpoint = `/api/ceo-portal/expenses/${expenseId}/${action}`;
         const res = await fetch(endpoint, {
@@ -553,9 +584,10 @@ export default function ApprovalsPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error(`Failed to ${action} expense claim.`);
-        alert(isApprove
+        window.showToast(isApprove
           ? 'Expense claim approved!'
-          : 'Expense claim rejected.'
+          : 'Expense claim rejected.',
+          isApprove ? 'success' : 'error'
         );
       } else if (item.type === 'Promotions') {
         const decision = isApprove ? 'approved_by_ceo' : 'rejected_by_ceo';
@@ -565,14 +597,23 @@ export default function ApprovalsPage() {
           body: JSON.stringify({ decision })
         });
         if (!res.ok) throw new Error(`Failed to ${action} promotion.`);
-        alert(isApprove ? '✅ Promotion approved! Employee notified.' : '❌ Promotion rejected. Employee notified.');
+        window.showToast(isApprove ? '✅ Promotion approved! Employee notified.' : '❌ Promotion rejected. Employee notified.', isApprove ? 'success' : 'error');
+      } else if (idStr.startsWith('AST-')) {
+        const ticketId = item.ticketId;
+        const endpoint = `/api/ceo-portal/tickets/${ticketId}/${action}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error(`Failed to ${action} asset request.`);
+        window.showToast(`Asset request ${isApprove ? 'approved' : 'rejected'} successfully.`, isApprove ? 'success' : 'error');
       }
 
       await fetchApprovals();
 
     } catch (err) {
       console.error(err);
-      alert(`Error performing action: ${err.message}`);
+      window.showToast(`Error performing action: ${err.message}`, 'error');
     } finally {
       // Close modal and drawer
       setModalConfig({ isOpen: false, type: '', item: null });
@@ -695,6 +736,7 @@ export default function ApprovalsPage() {
           approval={selectedApproval} 
           onClose={() => setSelectedApproval(null)} 
           onAction={openConfirmModal}
+          activeTab={activeTab}
         />
 
       </div>

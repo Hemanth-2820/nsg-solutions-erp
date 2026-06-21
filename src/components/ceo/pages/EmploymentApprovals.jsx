@@ -207,14 +207,9 @@ const EmploymentApprovals = () => {
         <button className={`${styles.tabBtn} ${activeTab === 'leave' ? styles.tabBtnActive : ''}`} onClick={() => handleTabChange('leave')}>
           <Calendar size={16} /> Leave {leaves.length > 0 && <span className={styles.badge}>{leaves.length}</span>}
         </button>
-        <button className={`${styles.tabBtn} ${activeTab === 'help' ? styles.tabBtnActive : ''}`} onClick={() => handleTabChange('help')}>
-          <HelpCircle size={16} /> Help {helpRequests.length > 0 && <span className={styles.badge}>{helpRequests.length}</span>}
-        </button>
+
         <button className={`${styles.tabBtn} ${activeTab === 'wfh' ? styles.tabBtnActive : ''}`} onClick={() => handleTabChange('wfh')}>
           <Home size={16} /> Work From Home {wfhRequests.length > 0 && <span className={styles.badge}>{wfhRequests.length}</span>}
-        </button>
-        <button className={`${styles.tabBtn} ${activeTab === 'assets' ? styles.tabBtnActive : ''}`} onClick={() => handleTabChange('assets')}>
-          <Package size={16} /> Asset Requests {assetRequests.length > 0 && <span className={styles.badge}>{assetRequests.length}</span>}
         </button>
       </div>
 

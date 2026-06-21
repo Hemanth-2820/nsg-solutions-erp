@@ -14,7 +14,7 @@ const Projects = () => {
   const [activeFilter, setActiveFilter] = useState('All');
 
   // Sprint Config States
-  const [sprintName, setSprintName] = useState('Sprint 43');
+  const [sprintName, setSprintName] = useState('');
   const [sprintGoal, setSprintGoal] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -47,14 +47,17 @@ const Projects = () => {
   const [expandedColumns, setExpandedColumns] = useState({});  // tracks which columns show all cards
   const [fullPageColumn, setFullPageColumn] = useState(null); // { id, title, cards } for full-page view
   const [showSprintModal, setShowSprintModal] = useState(false);
+  const [backendSprints, setBackendSprints] = useState(undefined);
   const [savedSprints, setSavedSprints] = useState(() => {
+    if (backendSprints !== undefined) {
+      return backendSprints;
+    }
     const local = localStorage.getItem('nsg_saved_sprints');
-    if (local) return JSON.parse(local);
-    const defaults = [
-      { id: 1, sprintId: 'SPR-43', name: 'Sprint 43', goal: 'Alpha Release', start: '', end: '', sp: 40, status: 'Planning' }
-    ];
-    localStorage.setItem('nsg_saved_sprints', JSON.stringify(defaults));
-    return defaults;
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (parsed.length > 0) return parsed;
+    }
+    return [];
   });
   const [selectedSprintFilter, setSelectedSprintFilter] = useState('All');
 
@@ -78,12 +81,8 @@ const Projects = () => {
             setSavedSprints(sprints);
             localStorage.setItem('nsg_saved_sprints', JSON.stringify(sprints));
           } else {
-            // Seed default if empty
-            const defaults = [
-              { id: 1, sprintId: 'SPR-43', name: 'Sprint 43', goal: 'Alpha Release', start: '', end: '', sp: 40, status: 'Planning' }
-            ];
-            setSavedSprints(defaults);
-            localStorage.setItem('nsg_saved_sprints', JSON.stringify(defaults));
+            setSavedSprints([]);
+            localStorage.setItem('nsg_saved_sprints', JSON.stringify([]));
           }
         }
       } catch (err) {
@@ -209,6 +208,7 @@ const Projects = () => {
           else if (t.status === 'testing') columns.testing.push(card);
           else if (t.status === 'blocked') columns.rejected.push(card);
           else if (t.status === 'pr') columns.pr.push(card);
+          else if (t.status === 'assignee') { /* skip — not yet accepted */ }
           else columns.todo.push(card);
         });
         setKanbanData(columns);
@@ -542,34 +542,7 @@ const Projects = () => {
                 </div>
                 <div className={styles.formGroup}>
                   <label style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>Story Points Target</label>
-                  <input type="number" placeholder="e.g. 40" value={spTarget} onChange={(e) => setSpTarget(parseInt(e.target.value) || 0)} />
-                </div>
-
-                {/* Sprint Backlog Section */}
-                <div style={{
-                  border: '1.5px dashed #3b82f6',
-                  borderRadius: '10px',
-                  padding: '16px',
-                  background: '#f8fafc',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  marginTop: '8px'
-                }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                    Sprint Backlog (0 items)
-                  </div>
-                  <div style={{
-                    border: '1px dotted #cbd5e1',
-                    borderRadius: '8px',
-                    padding: '24px 16px',
-                    textAlign: 'center',
-                    background: '#fff',
-                    color: '#94a3b8',
-                    fontSize: '12px'
-                  }}>
-                    Drag tasks from Product Backlog here to add them to this sprint
-                  </div>
+                  <input type="text" placeholder="e.g. 40" value={spTarget} onChange={(e) => setSpTarget(e.target.value.replace(/\D/g, ''))} />
                 </div>
               </div>
 
@@ -637,13 +610,42 @@ const Projects = () => {
               <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0 }}>Product Backlog</h3>
               <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0' }}>Managed by the CEO portal.</p>
             </div>
-            <div style={{
-              border: '2px dashed #e2e8f0', borderRadius: '10px',
-              padding: '60px 20px', textAlign: 'center', color: '#94a3b8',
-              background: '#f8fafc', flex: 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <p style={{ fontSize: '13px', margin: 0 }}>No items in product backlog.</p>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {(() => {
+                let atts = [];
+                try {
+                  if (activeProject && activeProject.attachments) {
+                    atts = JSON.parse(activeProject.attachments);
+                  }
+                } catch(e) {}
+                
+                if (atts.length === 0) {
+                  return (
+                    <div style={{
+                      border: '2px dashed #e2e8f0', borderRadius: '10px',
+                      padding: '60px 20px', textAlign: 'center', color: '#94a3b8',
+                      background: '#f8fafc', flex: 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <p style={{ fontSize: '13px', margin: 0 }}>No attachments available for this project.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: '#334155', margin: '0 0 4px 0' }}>Project Attachments</p>
+                    {atts.map((att, i) => (
+                      <div key={i} style={{fontSize: '13px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center'}}>
+                        <a href={att.url} target="_blank" rel="noreferrer" download={att.name} style={{color: '#2563eb', textDecoration: 'none', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px'}}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                          {att.name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -722,8 +724,6 @@ const Projects = () => {
               <div
                 key={col.id}
                 className={styles.kanbanColumn}
-                onDragOver={allowDrop}
-                onDrop={(e) => handleDrop(e, col.id)}
               >
                 <div className={styles.kanbanColHeader}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -748,8 +748,6 @@ const Projects = () => {
                               key={task.id}
                               className={styles.kTaskCard}
                               style={{ borderLeft: `4px solid ${prioStyle.border}` }}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, task.id, col.id)}
                               onClick={() => setSelectedTaskDetails({ ...task, colId: col.id })}
                             >
                               <div className={styles.kTaskTitleRow}>
@@ -1239,7 +1237,7 @@ const Projects = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Story Points</label>
-                <input type="number" defaultValue={selectedTaskDetails.points} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc' }} />
+                <input type="text" defaultValue={selectedTaskDetails.points} onChange={(e) => e.target.value = e.target.value.replace(/\D/g, '')} style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a', background: '#f8fafc' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '13px', color: '#0f172a', marginBottom: '6px' }}>Priority</label>

@@ -865,11 +865,19 @@ class AssetResponse(BaseModel):
 
 @router.get("/resignation/status", response_model=Optional[ResignationResponse])
 def get_resignation_status(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
-    return db.query(models.Resignation).filter(models.Resignation.user_id == current_user.id, models.Resignation.deleted_at == None).first()
+    return db.query(models.Resignation).filter(
+        models.Resignation.user_id == current_user.id, 
+        models.Resignation.deleted_at == None,
+        models.Resignation.status != "withdrawn"
+    ).order_by(models.Resignation.id.desc()).first()
 
 @router.post("/resignation/submit", response_model=ResignationResponse)
 def submit_resignation(req: ResignationCreate, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
-    existing = db.query(models.Resignation).filter(models.Resignation.user_id == current_user.id, models.Resignation.deleted_at == None).first()
+    existing = db.query(models.Resignation).filter(
+        models.Resignation.user_id == current_user.id, 
+        models.Resignation.deleted_at == None,
+        models.Resignation.status != "withdrawn"
+    ).first()
     if existing:
          raise HTTPException(status_code=400, detail="Resignation already submitted.")
     
@@ -903,7 +911,19 @@ def withdraw_resignation(current_user: models.User = Depends(security.get_curren
     if not res:
         raise HTTPException(status_code=404, detail="No active resignation request found.")
         
-    res.deleted_at = datetime.utcnow()
+    res.status = "withdraw_pending"
+    res.ceo_status = "withdraw_pending"
+    
+    # Notify HR and CEO
+    ceo_users = db.query(models.User).filter(models.User.role == "ceo").all()
+    hr_users = db.query(models.User).filter(models.User.role == "hr").all()
+    for user in ceo_users + hr_users:
+        db.add(models.Notification(
+            user_id=user.id,
+            message=f"{current_user.name} has withdrawn their resignation request.",
+            type="info"
+        ))
+        
     db.commit()
     return {"status": "success", "message": "Resignation request withdrawn successfully."}
 
@@ -978,6 +998,16 @@ def create_asset_request(req: AssetRequestCreate, current_user: models.User = De
         status="open"
     )
     db.add(ticket)
+    
+    # Notify HR and CEO
+    ceo_hr_users = db.query(models.User).filter(models.User.role.in_(["ceo", "hr"])).all()
+    for user in ceo_hr_users:
+        db.add(models.Notification(
+            user_id=user.id,
+            message=f"{current_user.name} has requested a new asset ({req.asset_type}).",
+            type="info"
+        ))
+
     db.commit()
     db.refresh(ticket)
     return {"id": ticket.id, "asset_type": ticket.title, "reason": ticket.description, "urgency": ticket.priority, "status": ticket.status, "created_at": ticket.created_at}
@@ -1605,6 +1635,8 @@ class AppraisalScorecardResponse(BaseModel):
     tl_name: str
     rating: str
     comments: str
+    emp_acknowledged: bool
+    hr_acknowledged: bool
 
     class Config:
         from_attributes = True
@@ -1630,6 +1662,8 @@ def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.
     if not scorecard:
         raise HTTPException(status_code=404, detail="Scorecard not found.")
     
+    scorecard.emp_acknowledged = True
+    
     tl_user = db.query(models.User).filter(models.User.name == scorecard.tl_name).first()
     if tl_user:
         db_notify = models.Notification(
@@ -1638,6 +1672,8 @@ def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.
             type="info"
         )
         db.add(db_notify)
+        db.commit()
+    else:
         db.commit()
     return {"status": "success", "message": "Scorecard acknowledged."}
 

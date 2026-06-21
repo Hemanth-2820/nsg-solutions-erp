@@ -144,6 +144,7 @@ class EmployeeCreateResponse(BaseModel):
 class EmployeeUpdateRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    emp_id: Optional[str] = None
     role: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
@@ -493,6 +494,8 @@ class AppraisalScorecardResponse(BaseModel):
     tl_name: str
     rating: str
     comments: str
+    emp_acknowledged: bool
+    hr_acknowledged: bool
 
     class Config:
         from_attributes = True
@@ -500,6 +503,7 @@ class AppraisalScorecardResponse(BaseModel):
 
 class PromotionResponse(BaseModel):
     id: int
+    employee_id: Optional[int] = None
     name: str
     current: str
     proposed: str
@@ -510,6 +514,7 @@ class PromotionResponse(BaseModel):
 
 
 class PromotionCreate(BaseModel):
+    employee_id: int
     name: str
     current: str
     proposed: str
@@ -534,7 +539,10 @@ def get_dashboard_metrics(current_user: models.User = Depends(security.get_curre
     ongoing_pips = db.query(models.PIP).filter(models.PIP.status == "ongoing").count()
     pending_leaves = db.query(models.LeaveRequest).filter(models.LeaveRequest.status == "pending").count()
     pending_expenses = db.query(models.ExpenseClaim).filter(models.ExpenseClaim.status == "pending").count()
-    pending_exits = db.query(models.Resignation).filter(models.Resignation.status == "pending").count()
+    pending_exits = db.query(models.Resignation).filter(
+        models.Resignation.deleted_at == None,
+        models.Resignation.status.in_(["pending", "withdraw_pending"])
+    ).count()
     unresolved_grievances = db.query(models.DisciplinaryTicket).filter(models.DisciplinaryTicket.status == "issued").count()
 
     return {
@@ -548,6 +556,71 @@ def get_dashboard_metrics(current_user: models.User = Depends(security.get_curre
         "pendingExits": pending_exits,
         "unresolvedGrievances": unresolved_grievances
     }
+
+@router.get("/dashboard/pending-approvals")
+def get_dashboard_pending_approvals(current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    
+    items = []
+    
+    # Leaves
+    leaves = db.query(models.LeaveRequest).filter(models.LeaveRequest.status == "pending").all()
+    for req in leaves:
+        emp = db.query(models.User).filter(models.User.id == req.user_id).first()
+        items.append({
+            "id": f"LEV-{req.id}",
+            "type": "Leave",
+            "title": f"{req.leave_type} Leave Request",
+            "employee": emp.name if emp else "Unknown",
+            "date": req.created_at.isoformat() if hasattr(req, 'created_at') and req.created_at else "2024-01-01T00:00:00Z",
+            "url": "/#/HR/leave"
+        })
+        
+    # Timesheets (Only counting pending)
+    timesheets = db.query(models.DailyTimesheet).filter(models.DailyTimesheet.status == "pending").all()
+    for ts in timesheets:
+        emp = db.query(models.User).filter(models.User.id == ts.user_id).first()
+        items.append({
+            "id": f"TS-{ts.id}",
+            "type": "Timesheet",
+            "title": "Daily Timesheet Submission",
+            "employee": emp.name if emp else "Unknown",
+            "date": ts.date.isoformat() if ts.date else "2024-01-01",
+            "url": "/#/HR/timesheets"
+        })
+        
+    # Resignations
+    resignations = db.query(models.Resignation).filter(
+        models.Resignation.deleted_at == None,
+        models.Resignation.status.in_(["pending", "withdraw_pending"])
+    ).all()
+    for r in resignations:
+        emp = db.query(models.User).filter(models.User.id == r.user_id).first()
+        items.append({
+            "id": f"RES-{r.id}",
+            "type": "Resignation",
+            "title": "Resignation Review",
+            "employee": emp.name if emp else "Unknown",
+            "date": r.created_at.isoformat() if hasattr(r, 'created_at') and r.created_at else "2024-01-01T00:00:00Z",
+            "url": "/#/HR/exits"
+        })
+        
+    # WFH / Regularization (AttendanceCorrection)
+    corrections = db.query(models.AttendanceCorrection).filter(models.AttendanceCorrection.status == "pending").all()
+    for c in corrections:
+        emp = db.query(models.User).filter(models.User.id == c.user_id).first()
+        items.append({
+            "id": f"ATT-{c.id}",
+            "type": "Attendance",
+            "title": "Attendance Regularization",
+            "employee": emp.name if emp else "Unknown",
+            "date": c.correction_date.isoformat() if c.correction_date else "2024-01-01",
+            "url": "/#/HR/attendance"
+        })
+        
+    # Sort items by date descending (newest first)
+    items.sort(key=lambda x: x["date"], reverse=True)
+    return items
 
 # 2. Recruitment Module (ATS Board)
 @router.get("/candidates", response_model=List[CandidateResponse])
@@ -617,7 +690,7 @@ def transition_candidate_to_employee(id: int, current_user: models.User = Depend
     
     # Auto setup dates
     today = date.today()
-    probation_end = date.fromordinal(today.toordinal() + 180) # 6 months
+    probation_end = date.fromordinal(today.toordinal() + 30) # 1 month
     
     # Initial documents list
     initial_docs = []
@@ -801,7 +874,7 @@ def add_employee(req: EmployeeCreateRequest, current_user: models.User = Depends
                 except ValueError:
                     pass
         emp_id = f"NSG-0{max_serial + 1}"
-    probation_end = date.fromordinal(req.join_date.toordinal() + 180)
+    probation_end = date.fromordinal(req.join_date.toordinal() + 30)
     
     initial_docs = []
     
@@ -996,6 +1069,13 @@ def update_employee(id: int, req: EmployeeUpdateRequest, current_user: models.Us
 
     if req.name is not None:
         emp.name = req.name
+    if req.emp_id is not None:
+        # Check uniqueness only if emp_id actually changed
+        if req.emp_id != emp.emp_id:
+            exists = db.query(models.User).filter(models.User.emp_id == req.emp_id, models.User.id != id).first()
+            if exists:
+                raise HTTPException(status_code=400, detail="Another employee already uses this Employee ID.")
+        emp.emp_id = req.emp_id
     if req.email is not None:
         # Check uniqueness only if email actually changed
         if req.email != emp.email:
@@ -1662,7 +1742,11 @@ def update_pip(id: int, req: PIPGoalUpdate, current_user: models.User = Depends(
 @router.get("/exits/resignations", response_model=List[ResignationResponse])
 def get_resignations(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
-    return db.query(models.Resignation).filter(models.Resignation.deleted_at == None).offset(skip).limit(limit).all()
+    return db.query(models.Resignation).filter(
+        models.Resignation.deleted_at == None,
+        models.Resignation.status != "withdrawn",
+        models.Resignation.status != "rejected"
+    ).order_by(models.Resignation.resignation_date.desc()).offset(skip).limit(limit).all()
 
 
 
@@ -1943,12 +2027,6 @@ def create_increment_proposal(req: IncrementProposalCreate, current_user: models
 def get_appraisal_scorecards(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
     scorecards = db.query(models.AppraisalScorecard).offset(skip).limit(limit).all()
-    if not scorecards:
-        for sc in DEFAULT_SCORECARDS:
-            db_sc = models.AppraisalScorecard(**sc)
-            db.add(db_sc)
-        db.commit()
-        scorecards = db.query(models.AppraisalScorecard).offset(skip).limit(limit).all()
     return scorecards
 
 
@@ -1966,23 +2044,23 @@ def get_promotions(current_user: models.User = Depends(security.get_current_user
 
 
 @router.post("/appraisal-scorecards/{id}/acknowledge")
-def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+def acknowledge_hr_scorecard(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
     scorecard = db.query(models.AppraisalScorecard).filter(models.AppraisalScorecard.id == id).first()
     if not scorecard:
         raise HTTPException(status_code=404, detail="Scorecard not found.")
-
-    # Find the TL user by name to send them a notification
+    
+    scorecard.hr_acknowledged = True
+    
     tl_user = db.query(models.User).filter(models.User.name == scorecard.tl_name).first()
     if tl_user:
         db_notify = models.Notification(
             user_id=tl_user.id,
             message=f"HR has acknowledged your performance scorecard for {scorecard.employee_name} (Rating: {scorecard.rating}). Calibration audit confirmed.",
-            type="info"
+            type="success"
         )
         db.add(db_notify)
         db.commit()
-
     return {"status": "success", "message": f"TL [{scorecard.tl_name}] notified. Calibration audit acknowledged."}
 
 
@@ -1990,6 +2068,7 @@ def acknowledge_scorecard(id: int, current_user: models.User = Depends(security.
 def create_promotion(req: PromotionCreate, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_hr_role(current_user)
     promo = models.Promotion(
+        employee_id=req.employee_id,
         name=req.name,
         current=req.current,
         proposed=req.proposed,
@@ -2023,15 +2102,49 @@ def decide_promotion(id: int, req: PromotionDecide, current_user: models.User = 
     promo.status = req.decision
     db.commit()
 
-    # Notify the employee if found
-    emp_user = db.query(models.User).filter(models.User.name == promo.name).first()
+    # Find employee by employee_id or name (fallback for old records)
+    emp_user = db.query(models.User).filter(
+        (models.User.id == promo.employee_id) if promo.employee_id else (models.User.name == promo.name)
+    ).first()
+
     if emp_user:
         if req.decision == "approved_by_ceo":
             msg = f"Congratulations! Your promotion from {promo.current} to {promo.proposed} has been approved by the CEO!"
             ntype = "success"
+            
+            # Automatically update the user's designation
+            emp_user.designation = promo.proposed
+            
+            # If the new title implies a management/lead role, upgrade their system access role to TL
+            proposed_lower = promo.proposed.lower()
+            if "lead" in proposed_lower or "manager" in proposed_lower or "director" in proposed_lower:
+                if emp_user.role == "employee":
+                    emp_user.role = "tl"
+                    
+            # Log the automatic update
+            db.add(models.AuditLog(
+                initiator_id="System Auto-Update",
+                module="Promotions",
+                record_id=emp_user.id,
+                action_type="auto_update",
+                change_diff=json.dumps({"old_designation": promo.current, "new_designation": promo.proposed, "new_role": emp_user.role})
+            ))
+            
+            # Add a job history record
+            job_hist = models.JobHistory(
+                employee_id=emp_user.id,
+                event_type="promotion",
+                old_role=promo.current,
+                new_role=promo.proposed,
+                effective_date=date.today(),
+                approved_by=current_user.name
+            )
+            db.add(job_hist)
+            
         else:
             msg = f"Your proposed promotion from {promo.current} to {promo.proposed} was not approved at this time."
             ntype = "warning"
+            
         db.add(models.Notification(user_id=emp_user.id, message=msg, type=ntype))
         db.commit()
 
@@ -2081,6 +2194,17 @@ def resolve_ticket(id: int, current_user: models.User = Depends(security.get_cur
     if not t:
         raise HTTPException(status_code=404, detail="Ticket not found.")
     t.status = "Resolved"
+    db.commit()
+    db.refresh(t)
+    return {"status": "success"}
+
+@router.post("/tickets/{id}/reject")
+def reject_ticket_hr(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_hr_role(current_user)
+    t = db.query(models.SupportTicket).filter(models.SupportTicket.id == id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Ticket not found.")
+    t.status = "Rejected"
     db.commit()
     db.refresh(t)
     return {"status": "success"}
@@ -2296,86 +2420,7 @@ def bank_transfer_payroll(
 # ─── PROMOTIONS MODULE ────────────────────────────────────────────────────────
 # Promotions flow: HR proposes → CEO approves/rejects (via CEO Approvals page)
 
-@router.get("/promotions", response_model=List[PromotionResponse])
-def list_promotions(
-    current_user: models.User = Depends(security.get_current_user),
-    db: Session = Depends(database.get_db)
-):
-    """Fetch all promotion proposals. Used by CEO portal Approvals page."""
-    if current_user.role not in ["hr", "ceo", "admin"]:
-        raise HTTPException(status_code=403, detail="Forbidden.")
-    return db.query(models.Promotion).order_by(models.Promotion.id.desc()).offset(skip).limit(limit).all()
 
-
-@router.post("/promotions", response_model=PromotionResponse, status_code=status.HTTP_201_CREATED)
-def create_promotion(
-    req: PromotionCreate,
-    current_user: models.User = Depends(security.get_current_user),
-    db: Session = Depends(database.get_db)
-):
-    """HR proposes a promotion for an employee."""
-    verify_hr_role(current_user)
-    promo = models.Promotion(
-        name=req.name,
-        current=req.current,
-        proposed=req.proposed,
-        status="pending_ceo"  # Awaiting CEO approval
-    )
-    db.add(promo)
-    db.commit()
-    db.refresh(promo)
-    return promo
-
-
-@router.post("/promotions/{id}/decide", response_model=PromotionResponse)
-def decide_promotion(
-    id: int,
-    req: PromotionDecide,
-    current_user: models.User = Depends(security.get_current_user),
-    db: Session = Depends(database.get_db)
-):
-    """
-    CEO approves or rejects a promotion.
-    CEO Approvals page POSTs to this endpoint when clicking Approve/Reject.
-    """
-    if current_user.role not in ["ceo", "admin"]:
-        raise HTTPException(status_code=403, detail="Only CEO can approve promotions.")
-    promo = db.query(models.Promotion).filter(models.Promotion.id == id).first()
-    if not promo:
-        raise HTTPException(status_code=404, detail="Promotion proposal not found.")
-
-    if req.decision not in ["approved_by_ceo", "rejected_by_ceo"]:
-        raise HTTPException(status_code=400, detail="Decision must be 'approved_by_ceo' or 'rejected_by_ceo'.")
-
-    promo.status = req.decision
-
-    # If approved, update the employee's designation in the User table
-    if req.decision == "approved_by_ceo":
-        emp = db.query(models.User).filter(models.User.name == promo.name).first()
-        if emp:
-            emp.designation = promo.proposed
-            # Add a job history record
-            job_hist = models.JobHistory(
-                employee_id=emp.id,
-                event_type="promotion",
-                old_role=promo.current,
-                new_role=promo.proposed,
-                effective_date=date.today(),
-                approved_by=current_user.name
-            )
-            db.add(job_hist)
-            # Notify the employee
-            notif = models.Notification(
-                user_id=emp.id,
-                message=f"Congratulations! Your promotion from {promo.current} to {promo.proposed} has been approved by the CEO.",
-                type="success",
-                read=False
-            )
-            db.add(notif)
-
-    db.commit()
-    db.refresh(promo)
-    return promo
 
 
 # ─── EXITS & RESIGNATIONS MODULE ─────────────────────────────────────────────
@@ -2389,7 +2434,11 @@ def list_resignations(
     """Fetch all employee resignation records. Used by CEO Approvals page."""
     if current_user.role not in ["hr", "ceo", "admin"]:
         raise HTTPException(status_code=403, detail="Forbidden.")
-    return db.query(models.Resignation).filter(models.Resignation.deleted_at == None).order_by(models.Resignation.resignation_date.desc()).offset(skip).limit(limit).all()
+    return db.query(models.Resignation).filter(
+        models.Resignation.deleted_at == None,
+        models.Resignation.status != "withdrawn",
+        models.Resignation.status != "rejected"
+    ).order_by(models.Resignation.resignation_date.desc()).all()
 
 
 @router.post("/exits/resignations/{id}/approve")
@@ -2407,19 +2456,33 @@ def approve_resignation(
     res = db.query(models.Resignation).filter(models.Resignation.id == id).first()
     if not res:
         raise HTTPException(status_code=404, detail="Resignation record not found.")
+    was_withdraw = res.status == "withdraw_pending" or getattr(res, "ceo_status", "") == "withdraw_pending"
+    
     if current_user.role == "ceo":
-        if getattr(res, "ceo_status", "pending") != "pending":
-            raise HTTPException(status_code=400, detail=f"Resignation is already {getattr(res, 'ceo_status', 'pending')}.")
-        res.ceo_status = "approved"
+        current_status = getattr(res, "ceo_status", "pending")
+        if current_status == "withdraw_pending":
+            res.ceo_status = "withdrawn"
+        elif current_status == "pending":
+            res.ceo_status = "approved"
+        else:
+            raise HTTPException(status_code=400, detail=f"Resignation is already {current_status}.")
     else:
-        if res.status != "pending":
+        if res.status == "withdraw_pending":
+            res.status = "withdrawn"
+        elif res.status == "pending":
+            res.status = "approved"
+        else:
             raise HTTPException(status_code=400, detail=f"Resignation is already {res.status}.")
-        res.status = "approved"
 
     # Notify the employee of the approval
+    if was_withdraw:
+        msg = "Your resignation withdrawal request has been approved."
+    else:
+        msg = f"Your resignation has been approved. Your Last Working Day is {res.LWD}. We wish you all the best!"
+
     notif = models.Notification(
         user_id=res.user_id,
-        message=f"Your resignation has been approved. Your Last Working Day is {res.LWD}. We wish you all the best!",
+        message=msg,
         type="info",
         read=False
     )
@@ -2440,19 +2503,33 @@ def reject_resignation(
     res = db.query(models.Resignation).filter(models.Resignation.id == id).first()
     if not res:
         raise HTTPException(status_code=404, detail="Resignation record not found.")
+    was_withdraw = res.status == "withdraw_pending" or getattr(res, "ceo_status", "") == "withdraw_pending"
+
     if current_user.role == "ceo":
-        if getattr(res, "ceo_status", "pending") != "pending":
-            raise HTTPException(status_code=400, detail=f"Resignation is already {getattr(res, 'ceo_status', 'pending')}.")
-        res.ceo_status = "rejected"
+        current_status = getattr(res, "ceo_status", "pending")
+        if current_status == "withdraw_pending":
+            res.ceo_status = "pending"
+        elif current_status == "pending":
+            res.ceo_status = "rejected"
+        else:
+            raise HTTPException(status_code=400, detail=f"Resignation is already {current_status}.")
     else:
-        if res.status != "pending":
+        if res.status == "withdraw_pending":
+            res.status = "pending"
+        elif res.status == "pending":
+            res.status = "rejected"
+        else:
             raise HTTPException(status_code=400, detail=f"Resignation is already {res.status}.")
-        res.status = "rejected"
 
     # Notify the employee
+    if was_withdraw:
+        msg = "Your resignation withdrawal request has been rejected. Your resignation remains active."
+    else:
+        msg = "Your resignation request has been reviewed and rejected. Please reach out to HR for next steps."
+        
     notif = models.Notification(
         user_id=res.user_id,
-        message="Your resignation request has been reviewed and rejected. Please reach out to HR for next steps.",
+        message=msg,
         type="warning",
         read=False
     )
@@ -2982,6 +3059,8 @@ class TicketResponse(BaseModel):
 
 @router.get("/tickets", response_model=List[TicketResponse])
 def list_support_tickets(
+    skip: int = 0,
+    limit: int = 100,
     current_user: models.User = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -3026,46 +3105,11 @@ def create_payroll_run(req: PayrollRunCreate, db: Session = Depends(database.get
     db.refresh(new_run)
     return {"status": "success", "run_id": new_run.id}
 
-@router.get("/promotions")
-def get_promotions(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
-    verify_hr_role(current_user)
-    promotions = db.query(models.Promotion).offset(skip).limit(limit).all()
-    res = []
-    for p in promotions:
-        res.append({
-            "id": p.id,
-            "employeeId": f"EMP-{p.id:03d}",
-            "name": p.name,
-            "currentRole": p.current,
-            "proposedRole": p.proposed,
-            "currentCTC": 0,
-            "proposedCTC": 0,
-            "managerId": "SYSTEM",
-            "justification": "Performance Review",
-            "status": p.status
-        })
-    return res
-
-@router.patch("/promotions/{id}/decide")
-def decide_promotion(id: int, request: dict, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
-    verify_hr_role(current_user)
-    promo = db.query(models.Promotion).filter(models.Promotion.id == id).first()
-    if not promo:
-        raise HTTPException(status_code=404, detail="Promotion not found")
-    
-    decision = request.get("decision")
-    if decision == "approve":
-        promo.status = "approved"
-    elif decision == "reject":
-        promo.status = "rejected"
-        
-    db.commit()
-    return {"status": "success", "decision": decision}
 
 @router.get("/exits/resignations")
 def get_resignations(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db), current_user: models.User = Depends(security.get_current_user)):
     verify_hr_role(current_user)
-    resigs = db.query(models.Resignation).filter(models.Resignation.deleted_at == None).offset(skip).limit(limit).all()
+    resigs = db.query(models.Resignation).offset(skip).limit(limit).all()
     return [
         {
             "id": r.id,
@@ -3424,41 +3468,6 @@ def get_reports_overview(current_user: models.User = Depends(security.get_curren
         "departmentHeadcounts": dept_counts
     }
 
-@router.get("/reports/payroll")
-def get_reports_payroll(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
-    verify_hr_role(current_user)
-    payslips = db.query(models.Payslip).order_by(models.Payslip.id.desc()).offset(skip).limit(limit).all()
-    pending_props = db.query(models.IncrementProposal).filter(models.IncrementProposal.status == "pending_ceo").count()
-    
-    runs = db.query(models.PayrollRun).filter(models.PayrollRun.status == "bank_transferred").order_by(models.PayrollRun.id.desc()).offset(skip).limit(limit).all()
-    last_run_id = runs[0].id if runs else None
-    
-    total_payout = 0
-    if last_run_id:
-        total_payout = sum([p.net_pay for p in payslips if p.payroll_run_id == last_run_id])
-    else:
-        total_payout = sum([p.net_pay for p in payslips])
-
-    payslip_logs = []
-    for p in payslips[:20]:
-        emp = db.query(models.User).filter(models.User.id == p.user_id).first()
-        gross = p.gross_pay if p.gross_pay else (p.basic + p.hra + p.da + p.allowances)
-        deductions = p.total_deductions if p.total_deductions else (p.epf + p.tds)
-        payslip_logs.append({
-            "employee_id": p.user_id,
-            "employee_name": emp.name if emp else "Unknown",
-            "period": f"{p.month} {p.year}",
-            "gross": gross,
-            "deductions": deductions,
-            "net_pay": p.net_pay
-        })
-
-    return {
-        "totalPayslips": len(payslips),
-        "totalNetPayout": total_payout,
-        "pendingProposals": pending_props,
-        "payslipLogs": payslip_logs
-    }
 
 @router.get("/reports/leave")
 def get_reports_leave(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
@@ -3509,7 +3518,7 @@ def get_reports_compliance(current_user: models.User = Depends(security.get_curr
     
     emp_compliance = []
     for emp in employees:
-        prog = next((p for p in progress_records if p.user_id == emp.id), None)
+        prog = next((p for p in progress_records if p.employee_id == emp.id), None)
         emp_compliance.append({
             "employee_name": emp.name,
             "modules_done": prog.completed_modules if prog else 0,

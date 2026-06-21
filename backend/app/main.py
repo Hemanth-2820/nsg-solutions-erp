@@ -63,6 +63,7 @@ import os
 # Ensure uploads directory exists before mounting
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/files/uploads", StaticFiles(directory="uploads"), name="files_uploads")
 
 @app.get("/")
 def read_root():

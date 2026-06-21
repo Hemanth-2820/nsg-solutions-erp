@@ -9,6 +9,7 @@ import json
 import hashlib
 import os
 import shutil
+import uuid
 from app import models, database
 from app.core import security
 
@@ -58,6 +59,9 @@ class UserDetailResponse(BaseModel):
     photo: Optional[str]
     last_active: Optional[datetime] = None
     shift_timing: Optional[str] = None
+    phone: Optional[str] = None
+    manager_id: Optional[int] = None
+    documents: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -103,6 +107,7 @@ class ProjectCreate(BaseModel):
     deadline: str
     checklist: Optional[str] = None
     department: Optional[str] = None
+    attachments: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -113,6 +118,7 @@ class ProjectUpdate(BaseModel):
     deadline: Optional[str] = None
     checklist: Optional[str] = None
     department: Optional[str] = None
+    attachments: Optional[str] = None
 
 class VendorCreate(BaseModel):
     vendor_id: str
@@ -265,8 +271,10 @@ class EscalationResponse(BaseModel):
     severity: str
     ceo_viewed: bool
     resolved: bool
+    rejected: bool = False
     dependencies: Optional[str]
     description: Optional[str]
+    tl_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -551,7 +559,8 @@ def create_project(req: ProjectCreate, current_user: models.User = Depends(secur
         status=req.status,
         deadline=req.deadline,
         checklist=req.checklist,
-        department=req.department
+        department=req.department,
+        attachments=req.attachments
     )
     db.add(proj)
     db.commit()
@@ -566,7 +575,14 @@ def update_project(project_id: int, req: ProjectUpdate, current_user: models.Use
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
         
-    if req.name is not None: proj.name = req.name
+    if req.name is not None and req.name != proj.name:
+        old_name = proj.name
+        proj.name = req.name
+        db.query(models.Task).filter(models.Task.project == old_name).update({models.Task.project: req.name}, synchronize_session=False)
+        db.query(models.DailyTimesheet).filter(models.DailyTimesheet.project == old_name).update({models.DailyTimesheet.project: req.name}, synchronize_session=False)
+    elif req.name is not None:
+        proj.name = req.name
+
     if req.client is not None: proj.client = req.client
     if req.budget is not None: proj.budget = req.budget
     if req.used is not None: proj.used = req.used
@@ -574,11 +590,24 @@ def update_project(project_id: int, req: ProjectUpdate, current_user: models.Use
     if req.deadline is not None: proj.deadline = req.deadline
     if req.checklist is not None: proj.checklist = req.checklist
     if req.department is not None: proj.department = req.department
+    if req.attachments is not None: proj.attachments = req.attachments
         
     db.commit()
     db.refresh(proj)
     proj.milestones = db.query(models.Milestone).filter(models.Milestone.project_id == proj.id).all()
     return proj
+
+@router.post("/projects/upload")
+async def upload_project_file(file: UploadFile = File(...), current_user: models.User = Depends(security.get_current_user)):
+    verify_ceo_role(current_user)
+    try:
+        os.makedirs("uploads/projects", exist_ok=True)
+        file_path = f"uploads/projects/{uuid.uuid4()}_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"url": f"/api/files/{file_path}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects/{project_id}/signoff", response_model=ProjectResponse)
 def signoff_project(project_id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
@@ -610,6 +639,26 @@ def delete_project_by_ceo(project_id: int, current_user: models.User = Depends(s
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
         
+    # Gather tasks first
+    tasks_to_delete = db.query(models.Task).filter(models.Task.project == proj.name).all()
+    task_ids = [t.id for t in tasks_to_delete]
+    
+    if task_ids:
+        # Explicitly delete related task components and timesheet rows to prevent orphaned records
+        db.query(models.TaskAttachment).filter(models.TaskAttachment.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.TaskSubtask).filter(models.TaskSubtask.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.TimesheetRow).filter(models.TimesheetRow.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(models.Task).filter(models.Task.id.in_(task_ids)).delete(synchronize_session=False)
+
+    # Delete Daily Timesheets
+    db.query(models.DailyTimesheet).filter(models.DailyTimesheet.project == proj.name).delete(synchronize_session=False)
+
+    # Delete related sprints
+    db.query(models.Sprint).filter(models.Sprint.project_id == proj.id).delete(synchronize_session=False)
+
+    # Delete related milestones
+    db.query(models.Milestone).filter(models.Milestone.project_id == proj.id).delete(synchronize_session=False)
+
     db.delete(proj)
     db.commit()
     return {"status": "success", "message": "Project deleted."}
@@ -784,10 +833,14 @@ def approve_ticket_ceo(id: int, current_user: models.User = Depends(security.get
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found.")
     
-    ticket.status = "Resolved"
+    if ticket.category == "asset_request":
+        ticket.status = "CEO Approved"
+    else:
+        ticket.status = "Resolved"
+        
     db_notify = models.Notification(
         user_id=ticket.user_id,
-        message=f"Your request '{ticket.title}' has been approved/resolved by the CEO.",
+        message=f"Your request '{ticket.title}' has been approved by the CEO.",
         type="success"
     )
     db.add(db_notify)
@@ -802,7 +855,11 @@ def reject_ticket_ceo(id: int, current_user: models.User = Depends(security.get_
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found.")
     
-    ticket.status = "Rejected"
+    if ticket.category == "asset_request":
+        ticket.status = "CEO Rejected"
+    else:
+        ticket.status = "Rejected"
+        
     db_notify = models.Notification(
         user_id=ticket.user_id,
         message=f"Your request '{ticket.title}' has been rejected by the CEO.",
@@ -989,14 +1046,51 @@ def reject_leave_ceo(id: int, current_user: models.User = Depends(security.get_c
 def get_escalations(current_user: models.User = Depends(security.get_current_user), skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     verify_ceo_role(current_user)
     
-    # Mark viewed by CEO
     escalations = db.query(models.Escalation).offset(skip).limit(limit).all()
+    result = []
     for esc in escalations:
-        if not esc.ceo_viewed:
-            esc.ceo_viewed = True
-            
+        esc_dict = {
+            "id": esc.id,
+            "user_id": esc.user_id,
+            "title": esc.title,
+            "task_link": esc.task_link,
+            "submitted_at": esc.submitted_at,
+            "severity": esc.severity,
+            "ceo_viewed": esc.ceo_viewed,
+            "resolved": esc.resolved,
+            "rejected": esc.rejected,
+            "dependencies": esc.dependencies,
+            "description": esc.description,
+            "tl_name": esc.user.name if esc.user else "Unknown TL"
+        }
+        result.append(esc_dict)
+    return result
+
+@router.post("/projects/escalations/{id}/acknowledge", response_model=EscalationResponse)
+def acknowledge_escalation_ceo(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+    verify_ceo_role(current_user)
+    esc = db.query(models.Escalation).filter(models.Escalation.id == id).first()
+    if not esc:
+        raise HTTPException(status_code=404, detail="Escalation not found.")
+        
+    esc.ceo_viewed = True
     db.commit()
-    return escalations
+    db.refresh(esc)
+    esc_dict = {
+        "id": esc.id,
+        "user_id": esc.user_id,
+        "title": esc.title,
+        "task_link": esc.task_link,
+        "submitted_at": esc.submitted_at,
+        "severity": esc.severity,
+        "ceo_viewed": esc.ceo_viewed,
+        "resolved": esc.resolved,
+        "rejected": esc.rejected,
+        "dependencies": esc.dependencies,
+        "description": esc.description,
+        "tl_name": esc.user.name if esc.user else "Unknown TL"
+    }
+    return esc_dict
 
 @router.post("/projects/escalations/{id}/resolve", response_model=EscalationResponse)
 def resolve_escalation_ceo(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
@@ -1010,16 +1104,32 @@ def resolve_escalation_ceo(id: int, current_user: models.User = Depends(security
     db.refresh(esc)
     return esc
 
-@router.delete("/projects/escalations/{id}")
-def delete_escalation_ceo(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
+@router.post("/projects/escalations/{id}/reject", response_model=EscalationResponse)
+def reject_escalation_ceo(id: int, current_user: models.User = Depends(security.get_current_user), db: Session = Depends(database.get_db)):
     verify_ceo_role(current_user)
     esc = db.query(models.Escalation).filter(models.Escalation.id == id).first()
     if not esc:
         raise HTTPException(status_code=404, detail="Escalation not found.")
         
-    db.delete(esc)
+    esc.rejected = True
+    esc.resolved = False
     db.commit()
-    return {"status": "success", "message": "Escalation deleted."}
+    db.refresh(esc)
+    esc_dict = {
+        "id": esc.id,
+        "user_id": esc.user_id,
+        "title": esc.title,
+        "task_link": esc.task_link,
+        "submitted_at": esc.submitted_at,
+        "severity": esc.severity,
+        "ceo_viewed": esc.ceo_viewed,
+        "resolved": esc.resolved,
+        "rejected": esc.rejected,
+        "dependencies": esc.dependencies,
+        "description": esc.description,
+        "tl_name": esc.user.name if esc.user else "Unknown TL"
+    }
+    return esc_dict
 
 # 5. Configs & Audit Trails
 @router.get("/audit-trail", response_model=List[AuditLogResponse])
@@ -1459,7 +1569,7 @@ def get_reports_analytics(current_user: models.User = Depends(security.get_curre
     ]
 
     # ── 6. ATTRITION: resignations per month / total headcount ───────────
-    all_resignations = db.query(models.Resignation).filter(models.Resignation.deleted_at == None).offset(skip).limit(limit).all()
+    all_resignations = db.query(models.Resignation).offset(skip).limit(limit).all()
     resign_by_month = defaultdict(int)
     for r in all_resignations:
         m = MONTH_NAMES[r.resignation_date.month - 1]
@@ -2437,17 +2547,20 @@ def get_all_approvals(current_user: models.User = Depends(security.get_current_u
         })
 
     # 3. Resignations
-    resignations = db.query(models.Resignation).filter(models.Resignation.deleted_at == None).offset(skip).limit(limit).all()
+    resignations = db.query(models.Resignation).filter(
+        models.Resignation.deleted_at == None,
+        models.Resignation.status != "withdrawn"
+    ).all()
     for r in resignations:
         emp = db.query(models.User).filter(models.User.id == r.user_id).first()
         status_label = 'Pending'
         c_status = getattr(r, 'ceo_status', r.status)
-        if c_status == 'approved': status_label = 'Approved'
+        if c_status == 'approved' or c_status == 'withdrawn': status_label = 'Approved'
         elif c_status == 'rejected': status_label = 'Denied'
         
         approvals.append({
             "id": f"RES-{r.id}",
-            "type": "Resignation",
+            "type": "Resignation Withdraw" if c_status in ['withdraw_pending', 'withdrawn'] else "Resignation",
             "requestedBy": emp.name if emp else f"User #{r.user_id}",
             "dept": emp.department if emp else "Unknown",
             "urgency": "High",
@@ -2455,6 +2568,29 @@ def get_all_approvals(current_user: models.User = Depends(security.get_current_u
             "amount": "-",
             "status": status_label,
             "resignationId": r.id,
+            "rawItem": None
+        })
+        
+    # 3.5 Asset Requests
+    asset_tickets = db.query(models.SupportTicket).filter(models.SupportTicket.category == 'asset_request').all()
+    for t in asset_tickets:
+        emp = db.query(models.User).filter(models.User.id == t.user_id).first()
+        status_label = 'Pending'
+        if t.status in ['Resolved', 'approved', 'CEO Approved']: status_label = 'Approved'
+        elif t.status in ['Rejected', 'rejected', 'CEO Rejected']: status_label = 'Denied'
+        
+        approvals.append({
+            "id": f"AST-{t.id}",
+            "type": "Asset Requests",
+            "requestedBy": emp.name if emp else f"User #{t.user_id}",
+            "dept": getattr(emp, 'department', 'Unknown') if emp else 'Unknown',
+            "urgency": "Normal",
+            "submittedAt": str(t.created_at).split('.')[0] if t.created_at else "Recent",
+            "amount": "-",
+            "status": status_label,
+            "ticketId": t.id,
+            "description": t.description,
+            "category": t.title,
             "rawItem": None
         })
         

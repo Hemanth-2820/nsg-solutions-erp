@@ -419,6 +419,7 @@ class Escalation(Base):
     severity = Column(String, default="Medium")  # Medium, High, Critical
     ceo_viewed = Column(Boolean, default=False)
     resolved = Column(Boolean, default=False)
+    rejected = Column(Boolean, default=False)
     dependencies = Column(String, nullable=True)  # Comma-separated dependencies list
     description = Column(Text, nullable=True)
 
@@ -664,6 +665,8 @@ class AppraisalScorecard(Base):
     tl_name = Column(String, nullable=False)
     rating = Column(String, nullable=False)
     comments = Column(Text, nullable=False)
+    emp_acknowledged = Column(Boolean, default=False)
+    hr_acknowledged = Column(Boolean, default=False)
 
 
 class Project(Base):
@@ -677,6 +680,7 @@ class Project(Base):
     status = Column(String, default="Active")  # Active, At Risk, Completed, On Hold
     deadline = Column(String, nullable=True)  # stored as string e.g. "Dec 31, 2025"
     checklist = Column(Text, nullable=True)   # JSON-serialized array of checklist items
+    attachments = Column(Text, nullable=True) # JSON-serialized array of attachment URLs
     department = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -699,6 +703,7 @@ class Promotion(Base):
     __tablename__ = "promotions"
 
     id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     name = Column(String, nullable=False)
     current = Column(String, nullable=False)
     proposed = Column(String, nullable=False)
