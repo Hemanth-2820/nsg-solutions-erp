@@ -1097,7 +1097,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
 
       {/* Popups Adding */}
       {showAddWizard && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={(e) => { if (e.target === e.currentTarget) setShowAddWizard(false); }}>
           <form onSubmit={handleAddEmployee} className="card" style={{ width: '700px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
             <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>🧑‍💼 Add New Employee Wizard</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
@@ -1239,7 +1239,7 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
 
       {/* Edit Employee Modal */}
       {showEditModal && editEmp && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}>
           <form onSubmit={handleEditEmployee} className="card" style={{ width: '700px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
             <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>✏️ Edit Employee Profile</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
@@ -1365,7 +1365,52 @@ export function EmployeeRegistryView({ queryParams, setQueryParams }) {
         </div>
       )}
 
-
+      {/* Reset Password Modal */}
+      {showResetModal && resetEmp && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={(e) => { if (e.target === e.currentTarget) { { setShowResetModal(false); setResetEmp(null); } } } }>
+          <form onSubmit={handleResetPassword} className="card" style={{ width: '400px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '12px' }}>
+            <h3>🔒 Reset Employee Password</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '8px 0 16px 0' }}>
+              Resetting password for <strong>{resetEmp.name}</strong> ({resetEmp.email}).
+            </p>
+            {(!resetEmp.designation || resetEmp.designation.toLowerCase() !== 'ceo') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '16px 0 8px 0' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>OLD PASSWORD</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showOldPassword ? "text" : "password"} 
+                    value={showOldPassword ? (resetEmp ? (updatedPasswords[resetEmp.id] || "erp123") : "") : "••••••••"}
+                    readOnly
+                    style={{ width: '100%', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', padding: '8px', paddingRight: '40px', borderRadius: '6px', cursor: 'not-allowed' }} 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowOldPassword(!showOldPassword)}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                  >
+                    {showOldPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '8px 0 16px 0' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>NEW PASSWORD</label>
+              <input 
+                type="text" 
+                value={newPassword} 
+                onChange={(e) => setNewPassword(e.target.value)} 
+                required 
+                placeholder="e.g. NewSecretPassword@123"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', padding: '8px', borderRadius: '6px' }} 
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => { setShowResetModal(false); setResetEmp(null); }} style={{ background: 'none', border: '1px solid var(--border-color)', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" style={{ backgroundColor: 'var(--accent-pink)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}>Update Password</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
