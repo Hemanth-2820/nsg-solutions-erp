@@ -41,7 +41,10 @@ export function AppraisalsView() {
   const parseDocs = (docsStr) => {
     try { return docsStr ? JSON.parse(docsStr) : {}; } catch { return {}; }
   };
-  const currentAnnualCTC = parseDocs(emp.documents).ctc || 300000;
+  
+  const rawCTC = parseDocs(emp.documents).ctc;
+  const cleanCTC = typeof rawCTC === 'string' ? Number(rawCTC.replace(/[^0-9.]/g, '')) : rawCTC;
+  const currentAnnualCTC = isNaN(cleanCTC) || !cleanCTC ? 300000 : cleanCTC;
 
   const [proposedCTC, setProposedCTC] = useState(() => Math.round(currentAnnualCTC * 1.10));
   const [incrementPct, setIncrementPct] = useState(10);
