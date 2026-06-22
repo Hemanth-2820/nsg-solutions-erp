@@ -121,22 +121,49 @@ export default function Messages({ initialSelectedChannel, currentUser }) {
     };
   }, []);
   const handleDPUpload = async (e) => {
-    const file = e.target.files[0];
+    const inputEl = e.target;
+    const file = inputEl.files[0];
     if (!file) return;
-    const token = localStorage.getItem('nsg_jwt_token');
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      const res = await fetch('/api/employee-portal/profile/upload-dp', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      if (res.ok) {
-        const data = await res.json();
-        window.dispatchEvent(new CustomEvent('dp_updated', { detail: data.url }));
-      }
-    } catch(e) {}
+    inputEl.value = ''; // Reset immediately so same file can be re-selected
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 300;
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const base64String = canvas.toDataURL('image/jpeg', 0.7);
+          console.log('[DP Upload] Base64 length:', base64String.length);
+          const token = localStorage.getItem('nsg_jwt_token');
+          const res = await fetch('/api/employee-portal/profile/upload-dp', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: base64String })
+          });
+          console.log('[DP Upload] Response status:', res.status);
+          if (res.ok) {
+            const data = await res.json();
+            console.log('[DP Upload] Success, url length:', data.url?.length);
+            window.dispatchEvent(new CustomEvent('dp_updated', { detail: data.url }));
+            if (window.toast) window.toast.success("Profile picture updated!");
+          } else {
+            const errText = await res.text();
+            console.error('[DP Upload] Server error:', errText);
+            if (window.toast) window.toast.error("Upload failed: " + errText);
+          }
+        } catch(err) {
+          console.error('[DP Upload] Error:', err);
+          if (window.toast) window.toast.error("Upload error: " + err.message);
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
