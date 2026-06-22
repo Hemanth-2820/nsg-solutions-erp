@@ -236,6 +236,7 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
   const [isSearching, setIsSearching] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const chatEndRef = useRef(null);
+  const [showDPMenu, setShowDPMenu] = useState(false);
 
   // === CHANNEL MANAGEMENT ===
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
@@ -1000,13 +1001,29 @@ export function HrMessagingView({ initialSelectedChannel, currentUser }) {
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--ceo-text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MessageSquare size={20} color="var(--ceo-primary)" /> Team Chat
             </h2>
-            <label style={{ cursor: 'pointer', position: 'relative' }} title="Change Profile Picture">
-              <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={currentUser?.photo ? `${currentUser.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`} alt="You" style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '2px solid var(--ceo-border)' }}  />
-              <div style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--ceo-primary)', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #FFF' }}>
-                <Camera size={10} color="#FFF" />
+            <div style={{ position: 'relative' }}>
+              <div style={{ cursor: 'pointer', position: 'relative' }} title="Profile Menu" onClick={() => setShowDPMenu(!showDPMenu)}>
+                <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(e.target.alt || 'User')}&background=random`; }} src={currentUser?.photo ? `${currentUser.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`} alt="You" style={{ width: '36px', height: '36px', borderRadius: '18px', objectFit: 'cover', border: '2px solid var(--ceo-border)' }}  />
+                <div style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--ceo-primary)', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #FFF' }}>
+                  <Camera size={10} color="#FFF" />
+                </div>
               </div>
-              <input type="file" style={{ display: 'none' }} accept="image/*" onChange={handleDPUpload} />
-            </label>
+              {showDPMenu && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#FFF', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid var(--ceo-border)', zIndex: 100, width: '150px', overflow: 'hidden' }}>
+                  <button 
+                    onClick={() => {
+                      setLightboxMedia({ url: currentUser?.photo ? currentUser.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`, type: 'image' });
+                      setShowDPMenu(false);
+                    }}
+                    style={{ width: '100%', padding: '12px 16px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)' }}
+                  >Preview Picture</button>
+                  <label style={{ width: '100%', padding: '12px 16px', display: 'block', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--ceo-text-primary)', borderTop: '1px solid var(--ceo-divider)' }}>
+                    Change Picture
+                    <input type="file" style={{ display: 'none' }} accept="image/*" onChange={(e) => { setShowDPMenu(false); handleDPUpload(e); }} />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
           <div style={{ position: 'relative' }}>
             <Search size={14} color="var(--ceo-text-muted)" style={{ position: 'absolute', left: '12px', top: '10px' }} />
