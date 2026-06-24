@@ -2,6 +2,8 @@ import React, { lazy, Suspense } from 'react';
 import ErrorBoundary from '../tl/ErrorBoundary';
 import './CEO.css';
 
+const CeoInstructions = lazy(() => import('./CeoInstructions'));
+
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Finance = lazy(() => import('./pages/Finance'));
 const People = lazy(() => import('./pages/People'));
@@ -46,6 +48,7 @@ export default function Ceo({ activeTab, queryParams, setQueryParams, currentUse
       case 'payroll': return <ErrorBoundary><CeoPayroll {...props} /></ErrorBoundary>;
       case 'orgChart': return <ErrorBoundary><OrgChart {...props} /></ErrorBoundary>;
       case 'approvalHistory': return <ErrorBoundary><ApprovalHistory {...props} /></ErrorBoundary>;
+      case 'instructions': return <ErrorBoundary><CeoInstructions {...props} /></ErrorBoundary>;
       default: return <ErrorBoundary><Dashboard {...props} /></ErrorBoundary>;
     }
   };

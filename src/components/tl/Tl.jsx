@@ -1,6 +1,8 @@
 import React, { useState, lazy, Suspense } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 
+const TlInstructions = lazy(() => import('./TlInstructions'));
+
 const Dashboard = lazy(() => import('./Dashboard/dashboard.module'));
 const Team = lazy(() => import('./Team/team.module'));
 const Projects = lazy(() => import('./Projects/projects.index'));
@@ -58,9 +60,12 @@ export default function Tl({ activeTab, setActiveTab, currentUser }) {
         {activeTab === 'holidays' && (
           <ErrorBoundary><HolidayCalendar /></ErrorBoundary>
         )}
+        {activeTab === 'instructions' && (
+          <ErrorBoundary><TlInstructions /></ErrorBoundary>
+        )}
       </Suspense>
       
-      {activeTab !== 'dashboard' && activeTab !== 'team' && activeTab !== 'projects' && activeTab !== 'tasks' && activeTab !== 'attendance' && activeTab !== 'timesheets' && activeTab !== 'approvals' && activeTab !== 'escalations' && activeTab !== 'messaging' && activeTab !== 'performance' && activeTab !== 'holidays' && (
+      {activeTab !== 'dashboard' && activeTab !== 'team' && activeTab !== 'projects' && activeTab !== 'tasks' && activeTab !== 'attendance' && activeTab !== 'timesheets' && activeTab !== 'approvals' && activeTab !== 'escalations' && activeTab !== 'messaging' && activeTab !== 'performance' && activeTab !== 'holidays' && activeTab !== 'instructions' && (
         <>
           <div className="component-header">
             <div>
