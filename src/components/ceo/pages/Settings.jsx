@@ -438,8 +438,8 @@ export default function Settings() {
               </div>
               <div className="ceo-command-content" style={{ padding: '0 24px 24px 24px', overflowY: 'auto' }}>
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)', overflow: 'hidden' }}>
-                  <div className="table-responsive-wrapper">
-                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <div className="table-responsive-wrapper" style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                         <th style={{ width: '15%', padding: '16px 24px', textAlign: 'left', color: '#64748b', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Timestamp</th>
@@ -550,8 +550,8 @@ export default function Settings() {
                 <div style={{ borderTop: '1px solid var(--ceo-border)', paddingTop: '24px' }}>
                   <div className="ceo-typography-section-title" style={{ fontSize: '13px', marginBottom: '16px' }}>RBAC PERMISSION MATRIX</div>
                   <div style={{ border: '1px solid var(--ceo-border)', borderRadius: '8px', overflow: 'hidden' }}>
-                    <div className="table-responsive-wrapper">
-                      <table className="ceo-erp-table" style={{ width: '100%', margin: 0 }}>
+                    <div className="table-responsive-wrapper" style={{ overflowX: 'auto' }}>
+                      <table className="ceo-erp-table" style={{ width: '100%', minWidth: '800px', margin: 0 }}>
                       <thead style={{ background: '#F8FAFC' }}>
                         <tr>
                           <th style={{ width: '250px' }}>Module / Permission</th>
