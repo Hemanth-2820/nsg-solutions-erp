@@ -1,6 +1,8 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import ErrorBoundary from '../tl/ErrorBoundary';
 
+const HrInstructions = lazy(() => import('./HrInstructions'));
+
 const HrDashboardView = lazy(() => import('./modules/dashboard/HrDashboardView').then(m => ({ default: m.HrDashboardView })));
 const RecruitmentView = lazy(() => import('./modules/recruitment/RecruitmentView').then(m => ({ default: m.RecruitmentView })));
 const EmployeeRegistryView = lazy(() => import('./modules/employees/EmployeeRegistryView').then(m => ({ default: m.EmployeeRegistryView })));
@@ -60,6 +62,8 @@ export default function Hr({ activeTab, queryParams, setQueryParams, currentUser
         return <ErrorBoundary><HolidayCalendar /></ErrorBoundary>;
       case 'orgChart':
         return <ErrorBoundary><OrgChart {...props} /></ErrorBoundary>;
+      case 'instructions':
+        return <ErrorBoundary><HrInstructions {...props} /></ErrorBoundary>;
       default:
         return <ErrorBoundary><HrDashboardView {...props} /></ErrorBoundary>;
     }

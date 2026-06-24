@@ -1,6 +1,8 @@
 import React, { Suspense, lazy } from 'react';
 import ErrorBoundary from '../common/ErrorBoundary';
 
+const EmployeeInstructions = lazy(() => import('./EmployeeInstructions'));
+
 const Expenses = lazy(() => import('./Expenses'));
 const Profile = lazy(() => import('./Profile'));
 const Resignation = lazy(() => import('./Resignation'));
@@ -60,6 +62,8 @@ export default function Employee({ activeTab, navigateTo, currentUser }) {
         return <Performance currentUser={currentUser} />;
       case 'holidays':
         return <HolidayCalendar />;
+      case 'instructions':
+        return <EmployeeInstructions />;
       default:
         // Fallback: show dashboard
         return <EmployeeDashboard setActiveTab={setActiveTab} currentUser={currentUser} />;

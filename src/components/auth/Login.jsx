@@ -90,7 +90,7 @@ export default function Login({ onLoginSuccess }) {
           <img onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(companyName)}&background=random`; }} src={companyLogo} alt={companyName} style={{ width: '100%', maxWidth: '360px', height: '120px', objectFit: 'contain', transform: 'scale(1.4)', margin: '-10px 0' }} />
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.4px' }}>
-              {companyName} Portal
+              {companyName}
             </h1>
             <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0', fontWeight: '400' }}>
               Sign In to Portal

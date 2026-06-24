@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, CreditCard, User, UserMinus, 
   Briefcase, MessageSquare,
-  Calendar, Clock, CheckSquare, Coins, Target
+  Calendar, Clock, CheckSquare, Coins, Target, BookOpen
 } from 'lucide-react';
 
 export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }) {
@@ -19,6 +19,7 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
   const isMessagingActive = activeTab === 'messaging';
   const isPerformanceActive = activeTab === 'performance';
   const isHolidaysActive = activeTab === 'holidays';
+  const isInstructionsActive = activeTab === 'instructions';
 
   const activeStyle = {
     color: '#10b981',
@@ -201,6 +202,16 @@ export default function EmployeeSidebar({ activeTab, setActiveTab, currentUser }
           <span>Messaging</span>
         </button>
       )}
+
+      {/* Instructions Tab */}
+      <button
+        className={`nav-link ${isInstructionsActive ? 'active' : ''}`}
+        onClick={() => setActiveTab('instructions')}
+        style={isInstructionsActive ? activeStyle : {}}
+      >
+        <BookOpen size={18} />
+        <span>Instructions</span>
+      </button>
     </div>
   );
 }

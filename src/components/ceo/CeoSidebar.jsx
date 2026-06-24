@@ -3,7 +3,7 @@ import { Reorder } from 'framer-motion';
 import { 
   LayoutDashboard, Building, DollarSign, CheckSquare, 
   Briefcase, BarChart2, Settings, Megaphone, 
-  Target, Users, MessageSquare, Box, Lock, Network
+  Target, Users, MessageSquare, Box, Lock, Network, BookOpen
 } from 'lucide-react';
 
 const DEFAULT_ITEMS = [
@@ -23,6 +23,7 @@ const DEFAULT_ITEMS = [
   { id: 'payroll', label: 'Payroll', icon: <DollarSign size={18} /> },
   { id: 'orgChart', label: 'Org Chart', icon: <Network size={18} /> },
   { id: 'approvalHistory', label: 'Approval History', icon: <Box size={18} /> },
+  { id: 'instructions', label: 'Instructions', icon: <BookOpen size={18} /> },
 ];
 
 export default function CeoSidebar({ activeTab, setActiveTab }) {
